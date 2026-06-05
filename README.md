@@ -55,14 +55,24 @@ assessments/spotterAI/
 ├── backend/
 │   ├── manage.py
 │   ├── hos_engine.py          # Pure-Python HOS logic (16 unit tests)
-│   ├── test_hos_engine.py     # unittest suite
-│   ├── geocoding.py           # Nominatim client
+│   ├── test_hos_engine.py     # HOS engine unittest suite
+│   ├── geocoding.py           # Nominatim + Photon fallback client
 │   ├── routing.py             # OSRM client
 │   ├── spotter_backend/       # Django project (settings, urls, wsgi)
 │   ├── trip/                  # Django app (views, serializers, urls)
+│   ├── tests/                 # 53 pytest integration tests
+│   │   ├── conftest.py        # fixtures: api_client, mock_geo_router, frozen_time
+│   │   ├── test_api_health.py
+│   │   ├── test_api_validation.py
+│   │   ├── test_api_trip.py   # 4 presets, sleeper on/off, cycle cap, multi-day
+│   │   ├── test_api_errors.py # geocoding/routing failures
+│   │   ├── test_geocoding.py  # Nominatim + Photon fallback
+│   │   ├── test_routing.py    # OSRM client
+│   │   └── test_live_api.py   # 8 live network tests (deployed backend)
 │   ├── requirements.txt
 │   ├── runtime.txt
 │   ├── Procfile               # Render entry point
+│   ├── pytest.ini
 │   └── package.json
 ├── frontend/
 │   ├── src/
@@ -75,11 +85,75 @@ assessments/spotterAI/
 │   │       ├── api.ts
 │   │       ├── types.ts
 │   │       └── pdfExport.ts
+│   ├── tests/e2e/             # 18 Playwright e2e tests
+│   │   ├── _setup.ts          # auto-starts Django + Vite
+│   │   ├── home.spec.ts
+│   │   ├── trip-flow.spec.ts
+│   │   └── errors.spec.ts
+│   ├── playwright.config.ts
 │   ├── vite.config.ts
 │   ├── vercel.json
 │   └── package.json
+├── .github/workflows/ci.yml   # CI: backend pytest + Playwright
+├── run-all-tests.sh           # local: run both test suites
 └── README.md
 ```
+
+## Testing
+
+The project ships with **87 tests** across two suites:
+
+### Backend (`pytest`, 69 tests)
+
+```bash
+cd backend
+python -m pytest tests/ --tb=short           # run mocked + live
+python -m pytest tests/ -m "not live"        # mocked only (~0s)
+python -m pytest tests/ --runslow            # include live network tests
+```
+
+Coverage:
+- `test_hos_engine.py` (16) — pure-Python HOS engine, 24h invariant, edge cases
+- `test_api_health.py` (3) — health endpoint
+- `test_api_validation.py` (10) — request validation, range checks, ISO8601
+- `test_api_trip.py` (24) — full pipeline with mocked geocoder/router
+  - 4 form presets (short, long, cross-country, cycle limit)
+  - Sleeper berth on/off
+  - 11h drive cap, 14h window, 30-min break, fueling, pre/post-trip
+  - Cycle cap (0/70 and 65/70 with 34-hr restart)
+  - Start time variations
+  - Cumulative miles monotonic
+- `test_api_errors.py` (7) — geocoding failures, routing failures
+- `test_geocoding.py` (11) — Nominatim + Photon client + fallback logic
+- `test_routing.py` (5) — OSRM client
+- `test_live_api.py` (8) — hits real Nominatim, Photon, OSRM, and the deployed Render backend
+
+### Frontend (`@playwright/test`, 18 tests)
+
+```bash
+cd frontend
+npm install
+npx playwright install --with-deps chromium   # one-time
+npx playwright test                            # run all
+npm run test:headed                            # headed mode
+npm run test:report                            # open last HTML report
+```
+
+Coverage:
+- `home.spec.ts` (10) — page renders, all 4 inputs + cycle + sleeper present, preset buttons
+- `trip-flow.spec.ts` (4) — full submit flow, multi-day results, custom input
+- `errors.spec.ts` (4) — bad input, unknown location, sleeper toggle, cycle validation
+- PDF export — verifies download triggers and produces a valid `.pdf` file
+
+### All at once
+
+```bash
+./run-all-tests.sh
+```
+
+### CI
+
+GitHub Actions runs the full suite on every push: see `.github/workflows/ci.yml`.
 
 ---
 

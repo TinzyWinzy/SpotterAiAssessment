@@ -5,7 +5,10 @@
   "main": "manage.py",
   "scripts": {
     "dev": "python manage.py runserver",
-    "test": "python test_hos_engine.py"
+    "test": "python -m pytest tests/ --tb=short -m 'not live'",
+    "test:engine": "python test_hos_engine.py",
+    "test:live": "python -m pytest tests/ --tb=short",
+    "test:watch": "python -m pytest tests/ --tb=short -m 'not live' -f"
   },
   "author": "Tinotenda Duma",
   "license": "ISC",

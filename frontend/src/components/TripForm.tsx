@@ -54,8 +54,9 @@ export function TripForm({ onSubmit, loading }: Props) {
       </div>
 
       <div>
-        <label className="text-xs font-medium text-gray-600">Current location</label>
+        <label htmlFor="current-location" className="text-xs font-medium text-gray-600">Current location</label>
         <input
+          id="current-location"
           required
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
@@ -65,8 +66,9 @@ export function TripForm({ onSubmit, loading }: Props) {
       </div>
 
       <div>
-        <label className="text-xs font-medium text-gray-600">Pickup location</label>
+        <label htmlFor="pickup-location" className="text-xs font-medium text-gray-600">Pickup location</label>
         <input
+          id="pickup-location"
           required
           value={pickup}
           onChange={(e) => setPickup(e.target.value)}
@@ -76,8 +78,9 @@ export function TripForm({ onSubmit, loading }: Props) {
       </div>
 
       <div>
-        <label className="text-xs font-medium text-gray-600">Dropoff location</label>
+        <label htmlFor="dropoff-location" className="text-xs font-medium text-gray-600">Dropoff location</label>
         <input
+          id="dropoff-location"
           required
           value={dropoff}
           onChange={(e) => setDropoff(e.target.value)}
@@ -88,8 +91,9 @@ export function TripForm({ onSubmit, loading }: Props) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-medium text-gray-600">Cycle used (hrs)</label>
+          <label htmlFor="cycle-used" className="text-xs font-medium text-gray-600">Cycle used (hrs)</label>
           <input
+            id="cycle-used"
             type="number"
             min={0}
             max={70}
@@ -105,6 +109,7 @@ export function TripForm({ onSubmit, loading }: Props) {
               type="checkbox"
               checked={sleeper}
               onChange={(e) => setSleeper(e.target.checked)}
+              aria-label="Use sleeper berth"
               className="w-4 h-4 rounded border-gray-300 text-spotter-600 focus:ring-spotter-500"
             />
             Use sleeper berth

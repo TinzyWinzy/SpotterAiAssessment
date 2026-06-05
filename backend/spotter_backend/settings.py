@@ -31,12 +31,19 @@ DEBUG = os.environ.get("DEBUG", "True").lower() in ("1", "true", "yes")
 
 # On Render, RENDER_EXTERNAL_HOSTNAME is auto-injected.
 _render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()] or [
-    _render_host,
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
-]
+_env_hosts = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()]
+if _env_hosts:
+    ALLOWED_HOSTS = _env_hosts
+elif DEBUG:
+    # Dev mode: allow any host (testserver, localhost, onrender, etc.)
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = [
+        _render_host,
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+    ]
 
 
 # Application definition

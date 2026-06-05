@@ -42,3 +42,9 @@ local_settings.py
 build/
 dist/
 *.whl
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+.tox/
