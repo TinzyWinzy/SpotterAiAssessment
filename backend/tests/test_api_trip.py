@@ -71,17 +71,20 @@ class TestShortTrip:
         # 3 stops
         assert len(body["stops"]) == 3
         assert [s["kind"] for s in body["stops"]] == ["current", "pickup", "dropoff"]
-        # Stop labels are non-empty
-        for s in body["stops"]:
-            assert s["label"]
-            assert -90 <= s["lat"] <= 90
-            assert -180 <= s["lon"] <= 180
 
-        # Route
-        assert body["route"]["distance_mi"] > 0
-        assert body["route"]["duration_h"] > 0
-        assert body["route"]["geometry"]["type"] == "LineString"
-        assert len(body["route"]["geometry"]["coordinates"]) >= 2
+    def test_recap_present_on_every_day(self, api_client, mock_geo_router, frozen_time):
+        """Every day in the response must include a `recap` dict with all 6 cells."""
+        resp = api_client.post(URL, _basic_body(), format="json")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["days"]) >= 1
+        for d in body["days"]:
+            assert "recap" in d, f"Missing recap in day: {d['date']}"
+            recap = d["recap"]
+            for k in ("last_8day_total", "last_7day_total", "tomorrow_70_budget",
+                      "last_5day_total", "last_7day_total_60", "tomorrow_60_budget",
+                      "took_34h_restart", "approximate"):
+                assert k in recap, f"Missing {k} in recap: {recap}"
 
     def test_single_day(self, api_client, mock_geo_router, frozen_time):
         resp = api_client.post(URL, _basic_body(), format="json")

@@ -106,6 +106,7 @@ def trip_plan(request):
             "events": [fmt_event(e) for e in d.events],
             "totals": {k: round(v, 2) for k, v in totals.items()},
             "status_quarters": d.status_quarters,
+            "recap": d.recap,
         })
 
     stops = [

@@ -50,12 +50,26 @@ export interface TripEvent {
   cumulative_miles: number;
 }
 
+export interface DayLogRecap {
+  cycle_used_hrs: number;
+  on_duty_today: number;
+  last_8day_total: number;
+  last_7day_total: number;
+  tomorrow_70_budget: number;
+  last_5day_total: number;
+  last_7day_total_60: number;
+  tomorrow_60_budget: number;
+  took_34h_restart: boolean;
+  approximate: boolean;
+}
+
 export interface DayLog {
   date: string;
   total_miles: number;
   events: TripEvent[];
   totals: { off_duty: number; sleeper: number; driving: number; on_duty: number };
   status_quarters: DutyStatus[];
+  recap?: DayLogRecap;
 }
 
 export interface TripRequest {

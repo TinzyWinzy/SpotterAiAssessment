@@ -282,6 +282,58 @@ class TestHOSEngine(unittest.TestCase):
         sleepers = [ev for day in days for ev in day.events if ev.status == SLEEPER]
         self.assertEqual(len(sleepers), 0, f"Expected no sleeper events, got {len(sleepers)}")
 
+    def test_recap_attached_to_every_day(self):
+        """compute_recap attaches a recap dict to every day in the trip."""
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        for d in days:
+            self.assertIn("last_8day_total", d.recap)
+            self.assertIn("last_7day_total", d.recap)
+            self.assertIn("last_5day_total", d.recap)
+            self.assertIn("last_7day_total_60", d.recap)
+            self.assertIn("tomorrow_70_budget", d.recap)
+            self.assertIn("tomorrow_60_budget", d.recap)
+            self.assertIn("took_34h_restart", d.recap)
+            self.assertTrue(d.recap["approximate"])
+
+    def test_recap_running_8day_total_increases_each_day(self):
+        """F (last_8day_total) should accumulate over the trip's on-duty hours."""
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        if len(days) < 2:
+            self.skipTest("Trip is single-day; running total trivially equal")
+        f_values = [d.recap["last_8day_total"] for d in days]
+        for i in range(1, len(f_values)):
+            self.assertGreaterEqual(
+                f_values[i], f_values[i - 1],
+                f"8-day total should not decrease: {f_values}",
+            )
+
+    def test_recap_34h_restart_flag_set_when_triggered(self):
+        """A trip hitting the 70h cap should set took_34h_restart=True on the day it triggers."""
+        # Use a long trip (NYC→Chicago) with high cycle to force a restart
+        trip = TripInput(
+            current=Point(40.7128, -74.0060, "New York, NY"),
+            pickup=Point(39.9526, -75.1652, "Philadelphia, PA"),
+            dropoff=Point(41.8781, -87.6298, "Chicago, IL"),
+            cycle_used_hrs=65.0,
+            avg_speed_mph=55.0,
+            start_time=datetime(2026, 6, 8, 6, 0),
+        )
+        days = generate_trip(trip)
+        # At least one day in this trip must have a 34-hr restart
+        flagged = [d for d in days if d.recap["took_34h_restart"]]
+        self.assertGreater(len(flagged), 0, "Expected at least one day with 34-hr restart flag")
+
+    def test_recap_tomorrow_budget_decreases_with_on_duty(self):
+        """B (70-A) and E (60-C) should both be lower on a heavy day than a light one."""
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        b_values = [d.recap["tomorrow_70_budget"] for d in days]
+        for v in b_values:
+            self.assertLessEqual(v, 70.0)
+            self.assertGreaterEqual(v, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

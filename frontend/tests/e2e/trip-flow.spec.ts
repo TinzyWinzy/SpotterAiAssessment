@@ -60,6 +60,28 @@ test.describe("Trip planning flow", () => {
     const markers = page.locator(".custom-marker");
     expect(await markers.count()).toBeGreaterThan(3); // 3 main stops + rest stops
   });
+
+  test("each daily log renders the FMCSA recap table", async ({ page }) => {
+    await page.getByRole("button", { name: /cross-country/i }).click();
+    await page.getByRole("button", { name: /plan trip/i }).click();
+
+    await expect(page.getByRole("heading", { name: /trip summary/i })).toBeVisible({ timeout: 60_000 });
+    // Wait for the first daily log to render
+    await expect(page.getByText(/Driver's Daily Log/i).first()).toBeVisible({ timeout: 60_000 });
+    // Recap table headers — both driver columns
+    await expect(page.getByText(/70 Hour \/ 8 Day Drivers/i).first()).toBeVisible();
+    await expect(page.getByText(/60 Hour \/ 7 Day Drivers/i).first()).toBeVisible();
+    // All 6 cells (A, B, C, D, E, F) — visible in <text> elements
+    for (const cell of ["A.", "B.", "C.", "D.", "E.", "F."]) {
+      await expect(page.getByText(cell, { exact: true }).first()).toBeVisible();
+    }
+    // Original/Duplicates banner
+    await expect(page.getByText(/Original — File at home terminal/i).first()).toBeVisible();
+    // Shipping sub-section
+    await expect(page.getByText(/Shipping Documents/i).first()).toBeVisible();
+    // Italic caption
+    await expect(page.getByText(/Use time standard of home terminal/i).first()).toBeVisible();
+  });
 });
 
 test.describe("PDF export", () => {

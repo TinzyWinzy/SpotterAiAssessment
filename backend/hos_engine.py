@@ -103,6 +103,65 @@ class DayLog:
     events: List[Event] = field(default_factory=list)
     total_miles: float = 0.0
     warnings: List[str] = field(default_factory=list)
+    recap: dict = field(default_factory=dict)  # F, A, B, C, D, E, took_34h_restart, ...
+
+
+def compute_recap(days: List[DayLog], cycle_used_hrs: float) -> None:
+    """Attach a `recap` dict to every DayLog in `days` (in-place).
+
+    Recap values follow the FMCSA paper-form table:
+
+      70 Hour / 8 Day Drivers
+        A. Total hours on duty last 7 days including today
+        B. Total hours available tomorrow = 70 - A
+        F. Total hours on duty last 8 days including today
+      60 Hour / 7 Day Drivers
+        C. Total hours on duty last 5 days including today
+        D. Total hours on duty last 7 days including today
+        E. Total hours available tomorrow = 60 - C
+
+    `cycle_used_hrs` is the user's claim of on-duty in the last 8 days
+    BEFORE this trip. We add the trip's on-duty (driving + on-duty) on top.
+
+    Note: A, C, D are approximations because we don't have the user's prior
+    day-by-day breakdown. We assume the prior on-duty was evenly spread over
+    the 8 days, so the 7-day figure is `total_8day * 7/8` and the 5-day
+    figure is `total_8day * 5/8`. These are labelled in the UI as
+    "approximate" so reviewers know.
+    """
+    running = cycle_used_hrs
+    for day in days:
+        day_on_duty = sum(
+            ev.duration_h
+            for ev in day.events
+            if ev.status in (DRIVING, ON_DUTY)
+        )
+        running += day_on_duty
+        f_total = running
+        a_7day = f_total * 7.0 / 8.0
+        c_5day = f_total * 5.0 / 8.0
+        d_7day_60 = c_5day + day_on_duty  # last 2 days of the 7-day window
+        day.recap = {
+            "cycle_used_hrs": round(cycle_used_hrs, 2),
+            "on_duty_today": round(day_on_duty, 2),
+            "last_8day_total": round(f_total, 2),       # F
+            "last_7day_total": round(a_7day, 2),         # A
+            "tomorrow_70_budget": round(70.0 - a_7day, 2),  # B
+            "last_5day_total": round(c_5day, 2),         # C
+            "last_7day_total_60": round(d_7day_60, 2),   # D
+            "tomorrow_60_budget": round(60.0 - c_5day, 2),  # E
+            "took_34h_restart": any("34-hr" in ev.remark for ev in day.events),
+            "approximate": True,
+        }
+
+
+@dataclass
+class DayLog:
+    date: datetime  # midnight of the day
+    events: List[Event] = field(default_factory=list)
+    total_miles: float = 0.0
+    warnings: List[str] = field(default_factory=list)
+    recap: dict = field(default_factory=dict)  # F, A, B, C, D, E, took_34h_restart, ...
 
     @property
     def status_quarters(self) -> List[int]:
@@ -393,7 +452,9 @@ def generate_trip(trip: TripInput) -> List[DayLog]:
     else:
         fill_to_midnight(events, state, "Off duty (end of trip)")
 
-    return group_by_day(events)
+    days = group_by_day(events)
+    compute_recap(days, trip.cycle_used_hrs)
+    return days
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -185,7 +185,7 @@ function App() {
                   Daily Log Sheets
                 </h2>
                 {trip.days.map((d, i) => (
-                  <DailyLog key={d.date + i} day={d} index={i} />
+                  <DailyLog key={d.date + i} day={d} index={i} totalDays={trip.days.length} />
                 ))}
               </div>
             </>
