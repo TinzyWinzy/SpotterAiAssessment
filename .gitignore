@@ -32,3 +32,11 @@ staticfiles/
 # Misc
 *.swp
 *.swo
+
+# Test artifacts
+spotter-trip-plan-*.pdf
+playwright-report/
+test-results/
+.pytest_cache/
+htmlcov/
+
