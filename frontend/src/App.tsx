@@ -137,8 +137,47 @@ function App() {
               {/* Map */}
               <div className="bg-white rounded-xl shadow-md p-5">
                 <h2 className="text-lg font-semibold text-spotter-800 mb-3">Route Map</h2>
-                <RouteMap route={trip.route} stops={trip.stops} />
+                <RouteMap route={trip.route} stops={trip.stops} restStops={trip.rest_stops} />
               </div>
+
+              {/* Rest stops list */}
+              {trip.rest_stops && trip.rest_stops.length > 0 && (
+                <div className="bg-white rounded-xl shadow-md p-5">
+                  <h2 className="text-lg font-semibold text-spotter-800 mb-3">
+                    Stops &amp; Rests ({trip.rest_stops.length})
+                  </h2>
+                  <ol className="space-y-2 text-sm">
+                    {trip.rest_stops.map((r, i) => (
+                      <li
+                        key={`${r.day}-${i}`}
+                        className="flex items-center gap-3 px-3 py-2 bg-spotter-50/50 border border-spotter-100 rounded-md"
+                      >
+                        <span
+                          className="w-7 h-7 flex items-center justify-center rounded-full text-white text-xs font-bold"
+                          style={{
+                            background:
+                              r.kind === "fuel" ? "#7c3aed"
+                              : r.kind === "break" ? "#f59e0b"
+                              : r.kind === "rest" ? "#0e7c86"
+                              : "#6b7280",
+                          }}
+                        >
+                          {r.kind === "fuel" ? "⛽"
+                            : r.kind === "break" ? "☕"
+                            : r.kind === "rest" ? "🛏"
+                            : "•"}
+                        </span>
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{r.remark}</div>
+                          <div className="text-xs text-gray-500">
+                            {r.label} · {r.day} · {r.duration_h}h · {r.cumulative_miles} mi cumulative
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
               {/* Daily logs */}
               <div>

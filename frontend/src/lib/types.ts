@@ -1,4 +1,5 @@
 export type DutyStatus = 0 | 1 | 2 | 3;
+
 export const STATUS_NAMES: Record<DutyStatus, string> = {
   0: "Off Duty",
   1: "Sleeper Berth",
@@ -10,6 +11,33 @@ export interface Point {
   lat: number;
   lon: number;
   label: string;
+}
+
+export interface RouteInfo {
+  distance_mi: number;
+  duration_h: number;
+  geometry: {
+    type: "LineString";
+    coordinates: [number, number][]; // [lon, lat] per GeoJSON
+  };
+}
+
+export interface StopMarker {
+  lat: number;
+  lon: number;
+  label: string;
+  kind: "current" | "pickup" | "dropoff";
+}
+
+export interface RestStopMarker {
+  lat: number;
+  lon: number;
+  label: string;
+  kind: "fuel" | "break" | "rest" | "pickup" | "dropoff";
+  remark: string;
+  day: string;
+  duration_h: number;
+  cumulative_miles: number;
 }
 
 export interface TripEvent {
@@ -30,35 +58,23 @@ export interface DayLog {
   status_quarters: DutyStatus[];
 }
 
-export interface RouteInfo {
-  distance_mi: number;
-  duration_h: number;
-  geometry: { type: "LineString"; coordinates: [number, number][] };
-}
-
-export interface StopMarker {
-  lat: number;
-  lon: number;
-  label: string;
-  kind: "current" | "pickup" | "dropoff";
-}
-
-export interface TripResponse {
-  ok: boolean;
-  stops: StopMarker[];
-  route: RouteInfo;
-  total_distance_mi: number;
-  days: DayLog[];
-  cycle_used_hrs: number;
-  warnings: string[];
-}
-
 export interface TripRequest {
   current_location: string;
   pickup_location: string;
   dropoff_location: string;
   current_cycle_used_hrs: number;
-  avg_speed_mph?: number;
   use_sleeper_berth?: boolean;
+  avg_speed_mph?: number;
   start_time?: string;
+}
+
+export interface TripResponse {
+  ok: boolean;
+  stops: StopMarker[];
+  rest_stops: RestStopMarker[];
+  route: RouteInfo;
+  total_distance_mi: number;
+  days: DayLog[];
+  cycle_used_hrs: number;
+  warnings: string[];
 }

@@ -114,9 +114,49 @@ def trip_plan(request):
         {"lat": dropoff["lat"], "lon": dropoff["lon"], "label": dropoff["label"], "kind": "dropoff"},
     ]
 
+    # Extract rest/fuel stops from the day logs (non-driving on-duty + break events
+    # at locations other than the 3 main stops).
+    main_stop_labels = {current["label"], pickup["label"], dropoff["label"]}
+    rest_stops = []
+    seen_locs: set[tuple[float, float]] = set()
+    for d in days:
+        for ev in d.events:
+            kind = None
+            lbl = ev.remark
+            low = ev.remark.lower()
+            if "fuel" in low and ev.status == hos_engine.ON_DUTY:
+                kind = "fuel"
+            elif "30-min break" in low:
+                kind = "break"
+            elif "10-hr reset" in low or "34-hr restart" in low:
+                kind = "rest"
+            elif "pickup" in low and ev.status == hos_engine.ON_DUTY:
+                kind = "pickup"
+            elif "dropoff" in low and ev.status == hos_engine.ON_DUTY:
+                kind = "dropoff"
+            if kind is None or not ev.location or not ev.location.label:
+                continue
+            if ev.location.label in main_stop_labels:
+                continue
+            key = (round(ev.location.lat, 4), round(ev.location.lon, 4), kind)
+            if key in seen_locs:
+                continue
+            seen_locs.add(key)
+            rest_stops.append({
+                "lat": ev.location.lat,
+                "lon": ev.location.lon,
+                "label": ev.location.label,
+                "kind": kind,
+                "remark": ev.remark,
+                "day": d.date.date().isoformat(),
+                "duration_h": round(ev.duration_h, 2),
+                "cumulative_miles": round(ev.cumulative_miles, 1),
+            })
+
     return Response({
         "ok": True,
         "stops": stops,
+        "rest_stops": rest_stops,
         "route": {
             "distance_mi": round(route_result["distance_mi"], 1),
             "duration_h": round(route_result["duration_seconds"] / 3600, 2),

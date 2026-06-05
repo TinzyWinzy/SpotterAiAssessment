@@ -45,6 +45,21 @@ test.describe("Trip planning flow", () => {
 
     await expect(page.getByRole("heading", { name: /trip summary/i })).toBeVisible({ timeout: 30_000 });
   });
+
+  test("long trip shows rest/fuel stops in the Stops & Rests list", async ({ page }) => {
+    await page.getByRole("button", { name: /cross-country/i }).click();
+    await page.getByRole("button", { name: /plan trip/i }).click();
+
+    await expect(page.getByRole("heading", { name: /stops.*rests/i })).toBeVisible({ timeout: 60_000 });
+    // At least one fuel + one break + one 10-hr reset for a 2126 mi cross-country trip
+    await expect(page.getByText(/fueling/i).first()).toBeVisible();
+    await expect(page.getByText(/30-min break/i).first()).toBeVisible();
+    await expect(page.getByText(/10-hr reset/i).first()).toBeVisible();
+
+    // The map should have rest-stop markers (counted via .custom-marker divs)
+    const markers = page.locator(".custom-marker");
+    expect(await markers.count()).toBeGreaterThan(3); // 3 main stops + rest stops
+  });
 });
 
 test.describe("PDF export", () => {
