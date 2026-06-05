@@ -68,8 +68,6 @@ export function DailyLog({
   // Recap table
   const recapTop = italicTop + italicH + 14;
   const recapH = 240;
-  const recapRecapCol = 220;          // left: "Recap" header + "On duty hours / Total lines 3 & 4" table
-  const recapDriverCol = (W - 20 - recapRecapCol) / 2;  // 70/8 + 60/7
   const sidebarCol = 130;             // right sidebar "If you took 34..."
 
   const totalMiles = day.total_miles;
@@ -434,10 +432,10 @@ export function DailyLog({
         <text x={20} y={recapTop + 14} fill="white" fontSize={10} fontWeight={700}>
           Recap (completed at end of day)
         </text>
-        <text x={recapRecapCol + 20} y={recapTop + 14} fill="white" fontSize={10} fontWeight={700}>
+        <text x={10 + recapCellW + 10} y={recapTop + 14} fill="white" fontSize={10} fontWeight={700}>
           70 Hour / 8 Day Drivers
         </text>
-        <text x={recapRecapCol + recapDriverCol + 20} y={recapTop + 14} fill="white" fontSize={10} fontWeight={700}>
+        <text x={10 + 2 * recapCellW + 10} y={recapTop + 14} fill="white" fontSize={10} fontWeight={700}>
           60 Hour / 7 Day Drivers
         </text>
 
@@ -449,47 +447,47 @@ export function DailyLog({
           {/* 70/8 column: A, B, F */}
           <g fontSize={9} fill="#0b1f24">
             <text x={recapCellW + 20} y={recapBodyTop + 16} fontWeight={700}>A.</text>
-            <text x={recapCellW + 50} y={recapBodyTop + 16}>Total hours on duty last 7 days</text>
-            <text x={recapCellW + 50} y={recapBodyTop + 28}>including today</text>
-            <text x={recapCellW + 350} y={recapBodyTop + 16} textAnchor="end" fontWeight={700} fontSize={11}>
+            <text x={recapCellW + 36} y={recapBodyTop + 16}>Total hours on duty last 7 days</text>
+            <text x={recapCellW + 36} y={recapBodyTop + 28}>including today</text>
+            <text x={2 * recapCellW - 4} y={recapBodyTop + 16} textAnchor="end" fontWeight={700} fontSize={11}>
               {fmt(r.last_7day_total)}
             </text>
 
             <text x={recapCellW + 20} y={recapBodyTop + 50} fontWeight={700}>B.</text>
-            <text x={recapCellW + 50} y={recapBodyTop + 50}>Total hours available tomorrow</text>
-            <text x={recapCellW + 50} y={recapBodyTop + 62}>(70 hr minus A)</text>
-            <text x={recapCellW + 350} y={recapBodyTop + 50} textAnchor="end" fontWeight={700} fontSize={11}>
+            <text x={recapCellW + 36} y={recapBodyTop + 50}>Total hours available tomorrow</text>
+            <text x={recapCellW + 36} y={recapBodyTop + 62}>(70 hr minus A)</text>
+            <text x={2 * recapCellW - 4} y={recapBodyTop + 50} textAnchor="end" fontWeight={700} fontSize={11}>
               {fmt(r.tomorrow_70_budget)}
             </text>
 
             <text x={recapCellW + 20} y={recapBodyTop + 90} fontWeight={700}>F.</text>
-            <text x={recapCellW + 50} y={recapBodyTop + 90}>Total hours on duty last 8 days</text>
-            <text x={recapCellW + 50} y={recapBodyTop + 102}>including today (lines 3 &amp; 4)</text>
-            <text x={recapCellW + 350} y={recapBodyTop + 90} textAnchor="end" fontWeight={700} fontSize={11}>
+            <text x={recapCellW + 36} y={recapBodyTop + 90}>Total hours on duty last 8 days</text>
+            <text x={recapCellW + 36} y={recapBodyTop + 102}>including today (lines 3 &amp; 4)</text>
+            <text x={2 * recapCellW - 4} y={recapBodyTop + 90} textAnchor="end" fontWeight={700} fontSize={11}>
               {fmt(r.last_8day_total)}
             </text>
           </g>
 
           {/* 60/7 column: C, D, E */}
           <g fontSize={9} fill="#0b1f24">
-            <text x={recapCellW * 2 + 20} y={recapBodyTop + 16} fontWeight={700}>C.</text>
-            <text x={recapCellW * 2 + 50} y={recapBodyTop + 16}>Total hours on duty last 5 days</text>
-            <text x={recapCellW * 2 + 50} y={recapBodyTop + 28}>including today</text>
-            <text x={recapCellW * 2 + 350} y={recapBodyTop + 16} textAnchor="end" fontWeight={700} fontSize={11}>
+            <text x={2 * recapCellW + 20} y={recapBodyTop + 16} fontWeight={700}>C.</text>
+            <text x={2 * recapCellW + 36} y={recapBodyTop + 16}>Total hours on duty last 5 days</text>
+            <text x={2 * recapCellW + 36} y={recapBodyTop + 28}>including today</text>
+            <text x={3 * recapCellW - 4} y={recapBodyTop + 16} textAnchor="end" fontWeight={700} fontSize={11}>
               {fmt(r.last_5day_total)}
             </text>
 
-            <text x={recapCellW * 2 + 20} y={recapBodyTop + 50} fontWeight={700}>D.</text>
-            <text x={recapCellW * 2 + 50} y={recapBodyTop + 50}>Total hours on duty last 7 days</text>
-            <text x={recapCellW * 2 + 50} y={recapBodyTop + 62}>including today</text>
-            <text x={recapCellW * 2 + 350} y={recapBodyTop + 50} textAnchor="end" fontWeight={700} fontSize={11}>
+            <text x={2 * recapCellW + 20} y={recapBodyTop + 50} fontWeight={700}>D.</text>
+            <text x={2 * recapCellW + 36} y={recapBodyTop + 50}>Total hours on duty last 7 days</text>
+            <text x={2 * recapCellW + 36} y={recapBodyTop + 62}>including today</text>
+            <text x={3 * recapCellW - 4} y={recapBodyTop + 50} textAnchor="end" fontWeight={700} fontSize={11}>
               {fmt(r.last_7day_total_60)}
             </text>
 
-            <text x={recapCellW * 2 + 20} y={recapBodyTop + 90} fontWeight={700}>E.</text>
-            <text x={recapCellW * 2 + 50} y={recapBodyTop + 90}>Total hours available tomorrow</text>
-            <text x={recapCellW * 2 + 50} y={recapBodyTop + 102}>(60 hr minus C)</text>
-            <text x={recapCellW * 2 + 350} y={recapBodyTop + 90} textAnchor="end" fontWeight={700} fontSize={11}>
+            <text x={2 * recapCellW + 20} y={recapBodyTop + 90} fontWeight={700}>E.</text>
+            <text x={2 * recapCellW + 36} y={recapBodyTop + 90}>Total hours available tomorrow</text>
+            <text x={2 * recapCellW + 36} y={recapBodyTop + 102}>(60 hr minus C)</text>
+            <text x={3 * recapCellW - 4} y={recapBodyTop + 90} textAnchor="end" fontWeight={700} fontSize={11}>
               {fmt(r.tomorrow_60_budget)}
             </text>
           </g>
@@ -504,7 +502,7 @@ export function DailyLog({
           </text>
           <line x1={20} y1={recapBodyTop + 40} x2={recapCellW - 10} y2={recapBodyTop + 40} stroke="#cbd5e1" strokeWidth={0.5} />
           <text x={20} y={recapBodyTop + 60} fontSize={9} fill="#0b1f24">Today:</text>
-          <text x={recapCellW - 20} y={recapBodyTop + 60} fontSize={11} fontWeight={700} textAnchor="end" fill="#0b1f24">
+          <text x={recapCellW - 6} y={recapBodyTop + 60} fontSize={11} fontWeight={700} textAnchor="end" fill="#0b1f24">
             {fmt((day.totals.driving + day.totals.on_duty))}
           </text>
           <text x={20} y={recapBodyTop + 90} fontSize={8} fontStyle="italic" fill="#475569">
