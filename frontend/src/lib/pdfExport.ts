@@ -24,7 +24,6 @@ export function exportTripPdf(
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
 
-  // Summary page
   doc.setFillColor(14, 124, 134);
   doc.rect(0, 0, W, 50, "F");
   doc.setTextColor(255, 255, 255);
@@ -45,7 +44,6 @@ export function exportTripPdf(
   doc.text(`Stops: ${stops.map((s) => `${s.kind}=${s.label}`).join("  →  ")}`, 24, y);
   y += 28;
 
-  // Day-by-day table
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.text("Day-by-Day Breakdown", 24, y);
@@ -70,7 +68,6 @@ export function exportTripPdf(
     y += 16;
   });
 
-  // One page per daily log
   days.forEach((day, idx) => {
     doc.addPage();
     drawLogPage(doc, day, idx, days.length, W);
@@ -103,7 +100,6 @@ function drawLogPage(
     approximate: false,
   };
 
-  // Title bar
   doc.setFillColor(14, 124, 134);
   doc.rect(0, 0, W, 20, "F");
   doc.setTextColor(255, 255, 255);
@@ -114,7 +110,6 @@ function drawLogPage(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
 
-  // Header
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.text("Drivers Daily Log", 18, 32);
@@ -135,7 +130,6 @@ function drawLogPage(
   doc.text(`Name of Carrier: John Doe's Transportation`, 18, 82);
   doc.text(`Main Office Address: Washington, D.C.`, W / 2, 82);
 
-  // Original/Duplicates banner (right)
   doc.setFont("helvetica", "bold");
   doc.text("Original — File at home terminal.", W - 18, 32, { align: "right" });
   doc.setFont("helvetica", "italic");
@@ -145,7 +139,6 @@ function drawLogPage(
   doc.text(`Home Terminal: Washington, D.C.`, W - 18, 64, { align: "right" });
   doc.text(`Co-Driver: —`, W - 18, 74, { align: "right" });
 
-  // Grid layout
   const gridLeft = 130;
   const gridTop = 100;
   const gridRight = W - 80;
@@ -155,12 +148,10 @@ function drawLogPage(
   const gridH = rowH * 4;
   const xAxisTop = gridTop + gridH;
 
-  // Grid background
   doc.setDrawColor(31, 41, 55);
   doc.setLineWidth(0.7);
   doc.rect(gridLeft, gridTop, gridW, gridH);
 
-  // Hour ticks
   doc.setLineWidth(0.4);
   for (let h = 0; h <= 24; h++) {
     const x = gridLeft + h * colHourW;
@@ -180,12 +171,10 @@ function drawLogPage(
     }
   }
 
-  // Row separators
   for (let r = 1; r < 4; r++) {
     doc.line(gridLeft, gridTop + r * rowH, gridRight, gridTop + r * rowH);
   }
 
-  // Status labels
   doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
   [0, 1, 2, 3].forEach((s) => {
@@ -194,7 +183,6 @@ function drawLogPage(
     });
   });
 
-  // Status quarter fills
   day.status_quarters.forEach((s, i) => {
     if (s === 0) return;
     const x = gridLeft + i * (colHourW / 4);
@@ -205,7 +193,6 @@ function drawLogPage(
     doc.rect(x, gridTop + s * rowH + 1, w, rowH - 2, "F");
   });
 
-  // Total Hours column
   const totalColLeft = gridRight;
   const totalColW = 70;
   doc.setDrawColor(31, 41, 55);
@@ -230,7 +217,6 @@ function drawLogPage(
     });
   });
 
-  // Remarks + Shipping split
   const remarksTop = xAxisTop + 16;
   const remarksH = 90;
   const remarksMainW = (W - 36 - gridLeft) * 0.62;
@@ -254,7 +240,6 @@ function drawLogPage(
     doc.text(truncated, gridLeft + 6, remarksTop + 22 + i * 9);
   });
 
-  // Shipping sub-section
   doc.rect(shippingLeft, remarksTop, shippingW, remarksH);
   doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
@@ -275,7 +260,6 @@ function drawLogPage(
   const pickupLoc = day.events.find((e) => e.remark === "Pickup")?.location.label || "—";
   doc.text(pickupLoc, shippingLeft + 6, remarksTop + 80);
 
-  // Italic captions
   const italicTop = remarksTop + remarksH + 4;
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7);
@@ -287,7 +271,6 @@ function drawLogPage(
   doc.text("Use time standard of home terminal.", gridLeft, italicTop + 16);
   doc.setTextColor(11, 31, 36);
 
-  // ────────────── RECAP TABLE ──────────────
   const recapTop = italicTop + 30;
   const recapH = 160;
   doc.setFillColor(14, 124, 134);
@@ -300,22 +283,18 @@ function drawLogPage(
   doc.text("60 Hour / 7 Day Drivers", 18 + 2 * (W - 36) / 3 + 6, recapTop + 11);
   doc.setTextColor(11, 31, 36);
 
-  // Recap body
   const bodyTop = recapTop + 16;
   const bodyH = recapH - 16;
   const cellW = (W - 36) / 3;
   doc.setDrawColor(31, 41, 55);
   doc.setLineWidth(0.7);
-  // Column dividers
   [cellW, cellW * 2].forEach((dx) => {
     const x = 18 + dx;
     doc.line(x, bodyTop, x, bodyTop + bodyH);
   });
-  // Outer border
   doc.rect(18, bodyTop, W - 36, bodyH);
 
   doc.setFontSize(8);
-  // Left column
   doc.setFont("helvetica", "bold");
   doc.text("On duty hours", 24, bodyTop + 12);
   doc.setFont("helvetica", "italic");
@@ -337,7 +316,6 @@ function drawLogPage(
     doc.setTextColor(11, 31, 36);
   }
 
-  // 70/8 column
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.text("A.", cellW + 24, bodyTop + 12);
@@ -365,7 +343,6 @@ function drawLogPage(
   doc.setFontSize(10);
   doc.text(fmt(recap.last_8day_total), 18 + 2 * cellW - 6, bodyTop + 60, { align: "right" });
 
-  // 60/7 column
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.text("C.", 2 * cellW + 24, bodyTop + 12);
@@ -393,7 +370,6 @@ function drawLogPage(
   doc.setFontSize(10);
   doc.text(fmt(recap.tomorrow_60_budget), W - 24, bodyTop + 60, { align: "right" });
 
-  // 34-hr restart banner
   if (recap.took_34h_restart) {
     doc.setFillColor(254, 243, 199);
     doc.setDrawColor(146, 64, 14);
@@ -408,7 +384,6 @@ function drawLogPage(
     doc.setTextColor(11, 31, 36);
   }
 
-  // Sidebar note
   doc.setFont("helvetica", "italic");
   doc.setFontSize(6);
   doc.setTextColor(71, 85, 105);
@@ -418,7 +393,6 @@ function drawLogPage(
   );
   doc.setTextColor(11, 31, 36);
 
-  // Footer
   const footerY = recapTop + recapH + 8;
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);

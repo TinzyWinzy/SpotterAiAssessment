@@ -3,9 +3,6 @@ import { ensureServers } from "./_setup";
 
 test.beforeAll(async () => { await ensureServers(); });
 
-/**
- * Full trip-planning flow: select preset -> submit -> verify map + log + PDF button.
- */
 test.describe("Trip planning flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -15,16 +12,13 @@ test.describe("Trip planning flow", () => {
     await page.getByRole("button", { name: /short trip/i }).click();
     await page.getByRole("button", { name: /plan trip/i }).click();
 
-    // Wait for the Trip Summary heading to appear
     await expect(page.getByRole("heading", { name: /trip summary/i })).toBeVisible({ timeout: 30_000 });
 
     // Map renders (Leaflet injects a .leaflet-container)
     await expect(page.locator(".leaflet-container").first()).toBeVisible();
 
-    // At least one daily log appears
     await expect(page.getByText(/driver.s daily log/i).first()).toBeVisible();
 
-    // PDF export button is present
     await expect(page.getByRole("button", { name: /export pdf/i })).toBeVisible();
   });
 
@@ -66,7 +60,6 @@ test.describe("Trip planning flow", () => {
     await page.getByRole("button", { name: /plan trip/i }).click();
 
     await expect(page.getByRole("heading", { name: /trip summary/i })).toBeVisible({ timeout: 60_000 });
-    // Wait for the first daily log to render
     await expect(page.getByText(/Driver's Daily Log/i).first()).toBeVisible({ timeout: 60_000 });
     // Recap table headers — both driver columns
     await expect(page.getByText(/70 Hour \/ 8 Day Drivers/i).first()).toBeVisible();
@@ -75,11 +68,8 @@ test.describe("Trip planning flow", () => {
     for (const cell of ["A.", "B.", "C.", "D.", "E.", "F."]) {
       await expect(page.getByText(cell, { exact: true }).first()).toBeVisible();
     }
-    // Original/Duplicates banner
     await expect(page.getByText(/Original — File at home terminal/i).first()).toBeVisible();
-    // Shipping sub-section
     await expect(page.getByText(/Shipping Documents/i).first()).toBeVisible();
-    // Italic caption
     await expect(page.getByText(/Use time standard of home terminal/i).first()).toBeVisible();
   });
 });

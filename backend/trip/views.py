@@ -44,7 +44,6 @@ def trip_plan(request):
         )
     data = serializer.validated_data
 
-    # 1. Geocode all three locations
     current = geocoding.geocode(data["current_location"])
     pickup = geocoding.geocode(data["pickup_location"])
     dropoff = geocoding.geocode(data["dropoff_location"])
@@ -59,7 +58,6 @@ def trip_plan(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # 2. Get route from OSRM
     route_result = routing.route([
         (current["lon"], current["lat"]),
         (pickup["lon"], pickup["lat"]),
@@ -71,7 +69,6 @@ def trip_plan(request):
             status=status.HTTP_502_BAD_GATEWAY,
         )
 
-    # 3. Build trip input
     trip = TripInput(
         current=Point(lat=current["lat"], lon=current["lon"], label=current["label"]),
         pickup=Point(lat=pickup["lat"], lon=pickup["lon"], label=pickup["label"]),
@@ -82,10 +79,8 @@ def trip_plan(request):
         use_sleeper_berth=data["use_sleeper_berth"],
     )
 
-    # 4. Generate HOS days
     days = generate_trip(trip)
 
-    # 5. Serialize response
     def fmt_event(ev):
         return {
             "start": ev.start.isoformat(),
@@ -115,8 +110,8 @@ def trip_plan(request):
         {"lat": dropoff["lat"], "lon": dropoff["lon"], "label": dropoff["label"], "kind": "dropoff"},
     ]
 
-    # Extract rest/fuel stops from the day logs (non-driving on-duty + break events
-    # at locations other than the 3 main stops).
+    # Rest/fuel stops: any non-driving on-duty or break event at a location
+    # other than the 3 main stops. Deduped by (lat, lon, kind).
     main_stop_labels = {current["label"], pickup["label"], dropoff["label"]}
     rest_stops = []
     seen_locs: set[tuple[float, float]] = set()

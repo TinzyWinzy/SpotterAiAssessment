@@ -73,7 +73,6 @@ class TestShortTrip:
         assert [s["kind"] for s in body["stops"]] == ["current", "pickup", "dropoff"]
 
     def test_recap_present_on_every_day(self, api_client, mock_geo_router, frozen_time):
-        """Every day in the response must include a `recap` dict with all 6 cells."""
         resp = api_client.post(URL, _basic_body(), format="json")
         assert resp.status_code == 200
         body = resp.json()

@@ -87,7 +87,6 @@ class TestPhotonSuccess:
 
 class TestFallbackLogic:
     def test_nominatim_success_skips_photon(self):
-        """If Nominatim returns a result, Photon must NOT be called."""
         geocoding.cache_clear()
         with patch.object(geocoding, "_geocode_nominatim", return_value={"lat": 1, "lon": 2, "label": "X", "display_name": "X"}) as nom, \
              patch.object(geocoding, "_geocode_photon") as phot:
@@ -97,7 +96,6 @@ class TestFallbackLogic:
         phot.assert_not_called()
 
     def test_nominatim_fail_uses_photon(self):
-        """If Nominatim returns None, Photon should be tried."""
         geocoding.cache_clear()
         with patch.object(geocoding, "_geocode_nominatim", return_value=None) as nom, \
              patch.object(geocoding, "_geocode_photon", return_value={"lat": 3, "lon": 4, "label": "Y", "display_name": "Y"}) as phot:
@@ -120,7 +118,6 @@ class TestCacheAndCircuitBreaker:
         geocoding._cb_open_until = 0.0
 
     def test_cache_hit_avoids_http(self):
-        """A second call with the same query must not hit the network."""
         with patch.object(geocoding, "_geocode_nominatim", return_value={"lat": 1, "lon": 2, "label": "X", "display_name": "X"}) as nom:
             r1 = geocoding.geocode("New York, NY")
             r2 = geocoding.geocode("new york, ny")  # case-insensitive
@@ -128,7 +125,6 @@ class TestCacheAndCircuitBreaker:
         assert nom.call_count == 1  # only first call goes to network
 
     def test_two_consecutive_429s_open_circuit(self):
-        """2 raw 429 responses from Nominatim → circuit opens → next call skips Nominatim."""
         import time as _t
         fake_429 = _FakeResp(429)
         with patch.object(geocoding.requests, "get", return_value=fake_429), \
@@ -138,8 +134,8 @@ class TestCacheAndCircuitBreaker:
             assert geocoding._cb_consecutive_429 == 2
             assert geocoding._cb_open_until > _t.time()  # circuit now open
             geocoding.geocode("C")  # this one should skip Nominatim
-        # Photon should have been called for all 3 (Nominatim was the path, but
-        # once the circuit is open Nominatim is skipped, so Photon does the work)
+        # Photon handles all 3: Nominatim is tried twice and fails (429), then
+        # skipped on the third call when the circuit is open.
         assert phot.call_count == 3
 
     def test_circuit_skips_nominatim_entirely_when_open(self):

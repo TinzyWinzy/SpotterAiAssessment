@@ -1,17 +1,11 @@
 """
-Geocoding via Nominatim (OpenStreetMap) with Photon (Komoot) as a fallback.
+Geocoder over Nominatim (OSM) with Photon (Komoot) as a fallback.
 
 Both are free, no API key required. Nominatim has a strict 1 req/sec rate limit
-and is known to block shared-IP hosting providers (Render, Vercel, etc.).
-Photon is more permissive and serves the same OSM data.
-
-Optimisations:
-  - In-memory LRU cache (1 hr TTL) so the same city is only geocoded once.
-  - Circuit breaker: after 2 consecutive 429s, skip Nominatim for 5 min and
-    go straight to Photon (the typical Render-on-shared-IP scenario).
-  - Demoted log line: noisy `print` replaced with `logging.warning` so prod
-    logs stay clean. Nominatim 429s are expected on Render — they no longer
-    look like a bug.
+and is known to block shared-IP hosting providers (Render, Vercel, etc.); Photon
+serves the same OSM data more permissively. The in-memory LRU cache (1 hr TTL)
+ensures the same city is only geocoded once per process, and the circuit breaker
+short-circuits to Photon after two consecutive Nominatim 429s.
 """
 from __future__ import annotations
 import logging
@@ -27,22 +21,13 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 PHOTON_URL = "https://photon.komoot.io/api/"
 USER_AGENT = "SpotterAssessment/1.0 (https://github.com/TinzyWinzy/spotter-assessment)"
 
-# --------------------------------------------------------------------------- #
-# Cache
-# --------------------------------------------------------------------------- #
 _CACHE: dict[str, tuple[float, Optional[dict]]] = {}
 _CACHE_TTL_S = 3600.0
 _CACHE_LOCK = Lock()
 
-# --------------------------------------------------------------------------- #
-# Rate limit (Nominatim: 1 req/sec, process-wide)
-# --------------------------------------------------------------------------- #
 _last_nominatim_call = 0.0
 _NOMINATIM_MIN_INTERVAL_S = 1.0
 
-# --------------------------------------------------------------------------- #
-# Circuit breaker: open after N consecutive 429s, stay open for T seconds
-# --------------------------------------------------------------------------- #
 _CB_FAIL_THRESHOLD = 2
 _CB_OPEN_DURATION_S = 300.0
 _cb_consecutive_429 = 0
@@ -69,7 +54,6 @@ def _cache_put(query: str, value: Optional[dict]) -> None:
 
 
 def cache_clear() -> None:
-    """Clear the in-memory geocode cache (test helper)."""
     with _CACHE_LOCK:
         _CACHE.clear()
 
@@ -181,26 +165,33 @@ def _geocode_photon(query: str) -> Optional[dict]:
         return None
 
 
+_NEGATIVE_CACHE_TTL_S = 60.0
+
+
 def geocode(query: str) -> Optional[dict]:
     """Return {lat, lon, display_name, label} or None.
 
-    Order: cache → Nominatim (if circuit closed) → Photon.
-    Negative results (None) are also cached briefly to avoid hammering.
+    Order: cache → Nominatim (if circuit closed) → Photon. Negative results
+    (None) are cached for a short window to avoid hammering both providers
+    on bogus lookups; positive results are cached for an hour.
     """
     query_norm = query.strip().lower()
     cached = _cache_get(query_norm)
-    if cached is not None or query_norm in {k for k, _ in _CACHE.items()}:
-        # Re-check the negative-cache sentinel: a stored None
-        with _CACHE_LOCK:
-            entry = _CACHE.get(query_norm)
-        if entry is not None and entry[1] is None and time.time() - entry[0] < 60:
-            return None
-        if cached is not None:
-            return cached
+    if cached is not None:
+        return cached
 
-    result: Optional[dict] = None
+    # `_cache_get` returns None both for cache misses and for expired entries.
+    # Distinguish the two by inspecting the raw entry: a stored None within
+    # the negative-cache window is a deliberate miss, not a re-try.
+    with _CACHE_LOCK:
+        entry = _CACHE.get(query_norm)
+    if entry is not None and entry[1] is None and time.time() - entry[0] < _NEGATIVE_CACHE_TTL_S:
+        return None
+
     if not _cb_is_open():
         result = _geocode_nominatim(query)
+    else:
+        result = None
     if result is None:
         result = _geocode_photon(query)
 

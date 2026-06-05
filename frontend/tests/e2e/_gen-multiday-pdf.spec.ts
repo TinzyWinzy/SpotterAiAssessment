@@ -1,6 +1,7 @@
 // Generate a multi-day trip PDF by clicking through the UI and capturing the download.
 import { test, expect } from "@playwright/test";
 import { ensureServers } from "./_setup";
+void ensureServers;
 
 test("generate multi-day PDF (LA -> Chicago)", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
