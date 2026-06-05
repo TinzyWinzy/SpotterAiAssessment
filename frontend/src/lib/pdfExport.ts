@@ -73,7 +73,7 @@ export function exportTripPdf(
   // One page per daily log
   days.forEach((day, idx) => {
     doc.addPage();
-    drawLogPage(doc, day, idx, days.length, W, H);
+    drawLogPage(doc, day, idx, days.length, W);
   });
 
   doc.save(`spotter-trip-plan-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -84,8 +84,7 @@ function drawLogPage(
   day: DayLog,
   idx: number,
   total: number,
-  W: number,
-  H: number
+  W: number
 ) {
   // Title bar
   doc.setFillColor(14, 124, 134);

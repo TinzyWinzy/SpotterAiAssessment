@@ -1,5 +1,4 @@
 import type { DayLog, DutyStatus } from "../lib/types";
-import { STATUS_NAMES } from "../lib/types";
 
 const STATUS_COLORS: Record<DutyStatus, string> = {
   0: "#ffffff",   // Off Duty — white/empty
@@ -108,6 +107,9 @@ export function DailyLog({
           </text>
           <text x={10} y={88} fontSize={8} fill="#475569">
             I certify that these entries are true and correct — {driverName}
+          </text>
+          <text x={430} y={88} fontSize={8} fill="#475569">
+            Shipping Doc: {shippingDoc}
           </text>
         </g>
 
