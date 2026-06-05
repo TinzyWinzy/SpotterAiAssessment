@@ -1,13 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TripForm, type FormData } from "./components/TripForm";
 import { RouteMap } from "./components/RouteMap";
 import { DailyLog } from "./components/DailyLog";
+import { AdminPage } from "./components/AdminPage";
 import { planTrip } from "./lib/api";
 import { exportTripPdf } from "./lib/pdfExport";
 import type { TripResponse } from "./lib/types";
-import { Download, AlertCircle, Truck, FileText, MapPin, Clock } from "lucide-react";
+import { Download, AlertCircle, Truck, FileText, MapPin, Clock, BarChart3 } from "lucide-react";
+
+function useHashRoute(): string {
+  const [hash, setHash] = useState(window.location.hash || "#/");
+  useEffect(() => {
+    const onChange = () => setHash(window.location.hash || "#/");
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  return hash;
+}
 
 function App() {
+  const route = useHashRoute();
+  if (route.startsWith("#/admin")) {
+    return <AdminPage />;
+  }
+  return <Planner />;
+}
+
+function Planner() {
   const [trip, setTrip] = useState<TripResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +62,16 @@ function App() {
               <p className="text-xs text-spotter-100">HOS-compliant route + daily log generator</p>
             </div>
           </div>
-          <div className="text-xs text-spotter-100 hidden md:block">
-            FMCSA Property-Carrying • 70hr/8day • 11/14/30/10/34
+          <div className="flex items-center gap-3">
+            <a
+              href="#/admin"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white/10 hover:bg-white/20 rounded-md"
+            >
+              <BarChart3 className="w-3.5 h-3.5" /> Admin
+            </a>
+            <div className="text-xs text-spotter-100 hidden md:block">
+              FMCSA Property-Carrying • 70hr/8day • 11/14/30/10/34
+            </div>
           </div>
         </div>
       </header>

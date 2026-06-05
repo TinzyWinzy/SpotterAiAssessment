@@ -5,7 +5,7 @@
  * Server detection: GETs /api/health/ and the Vite root, waits up to 30s each.
  * If the frontend is already up, this becomes a no-op.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -70,6 +70,10 @@ export async function ensureServers(): Promise<void> {
   if (!existsSync(path.join(BACKEND_DIR, "manage.py"))) {
     throw new Error(`Django backend not found at ${BACKEND_DIR}`);
   }
+
+  // Re-seed the demo data so admin/admin + tino/12345 always exist, regardless
+  // of what the backend pytest suite did to the dev DB.
+  spawnSync("python", ["manage.py", "seed_demo"], { cwd: BACKEND_DIR, stdio: "ignore" });
 
   if (!(await probe(BACKEND_URL))) {
     start("django", "python", ["manage.py", "runserver", `127.0.0.1:${BACKEND_PORT}`], BACKEND_DIR);

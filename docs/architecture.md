@@ -162,13 +162,23 @@ The geocoding module has a 1-hour in-memory LRU cache and a 2-strikes-then-300s 
 Vector PDF. The same `DailyLog.tsx` layout is mirrored in `pdfExport.ts` as a series of `doc.text`/`doc.rect` calls. Output is selectable text, scales infinitely, and is ~50 KB per day.
 
 ### One endpoint, one view
-No nested routes, no PATCH/PUT, no auth. This is an assessment, not a product. A real version would need a driver profile model, history tracking, and the recap math from real data instead of approximation.
+The trip-planning surface is one POST; auth + admin are separate. This keeps the happy path trivial. The admin / driver / history surface uses Token auth + role checks so a non-admin driver token can be rejected at the permission layer without custom view logic.
+
+## Why event list, not FSM library
+
+A "real" HOS engine is often modeled as a finite state machine with states like `OFF_DUTY → ON_DUTY → DRIVING → OFF_DUTY` and explicit transitions triggered by the clock and accumulated hours. Libraries like `transitions` or `sismic` make this declarative. We deliberately did **not** go that way, for these reasons:
+
+1. **The 96 quarter-hour bucketing already gives us a state machine.** `DayLog.status_quarters` is a length-96 array of duty-status codes; a state transition is just `status_quarters[i] != status_quarters[i-1]`. No additional data structure needed.
+2. **Rules overlap in ways FSMs handle awkwardly.** The 11-hour driving limit counts *cumulative driving*, the 14-hour window counts *cumulative on-duty*, the 30-min break fires after 8 hr driving — these are all *quantitative* triggers on running totals, not state-symbol transitions. An FSM with `if counter > X` guards on every transition is just a state diagram that re-implements counters.
+3. **The list is a "trace" the user can read.** Drivers, auditors, and recruiters all expect to see "you drove 9.5 hr, took a 30-min break, drove another 1.5 hr, then went off-duty" as a sequence of events with timestamps. That's exactly what we emit. An FSM with self-loops is harder to narrate.
+4. **The pure-Python implementation is testable in 30 unit tests** without any framework indirection. Adding a transitions library would shift coverage from "the rule is right" to "we configured the library correctly".
+
+The pragmatic decision: the engine's data model *is* a state machine (current state, event-driven transitions) but the implementation is a straight-line simulator over that model. Adding a library would couple us to its API for marginal benefit.
 
 ## What I'd do differently with more time
 
-- Per-day mileage split: deadhead vs loaded
-- Real 8-day driver history instead of approximation
-- A proper state machine for the engine: the current `while miles_remaining > 0` loop is correct but hard to extend (e.g. "what if the driver is sick on day 3?")
 - Map clustering for very long trips
 - Snapshot tests on the SVG output of `DailyLog.tsx`
-- A second paper-form variant: the 24-hour + 7-day single-page log
+- Postgres + persistent disk on Render so driver records survive redeploys
+- WebSocket push for live HOS-clock when the planner is left open
+- ELD-format import for `DayHistory` (`.eld` files) so the recap math is sourced from real records, not manual entry

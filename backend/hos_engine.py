@@ -78,6 +78,7 @@ class Event:
     location: Point
     remark: str
     cumulative_miles: float = 0.0
+    leg_kind: Optional[str] = None  # "deadhead" | "loaded" | None (non-driving)
 
 
 @dataclass
@@ -85,6 +86,9 @@ class DayLog:
     date: datetime
     events: List[Event] = field(default_factory=list)
     total_miles: float = 0.0
+    deadhead_mi: float = 0.0
+    loaded_mi: float = 0.0
+    on_duty_today: float = 0.0
     warnings: List[str] = field(default_factory=list)
     recap: dict = field(default_factory=dict)
 
@@ -172,6 +176,55 @@ def compute_recap(days: List[DayLog], cycle_used_hrs: float) -> None:
             "tomorrow_60_budget": round(60.0 - c_5day, 2),
             "took_34h_restart": any("34-hr" in ev.remark for ev in day.events),
             "approximate": True,
+        }
+
+
+def compute_recap_with_history(
+    days: List[DayLog],
+    history: List[dict],
+    cycle_used_hrs: float = 0.0,
+) -> None:
+    """Attach a `recap` dict using real per-day on-duty history (no approximation).
+
+    `history` is a list of `{"date": date, "on_duty_hrs": float}` records for
+    days *before* the trip. Missing dates are treated as 0. The 8/7/5-day
+    windows roll forward as the trip progresses (day 2 of the trip drops
+    the oldest pre-trip day and includes the new trip day).
+    """
+    on_duty: dict = {}
+    for h in history:
+        d = h["date"]
+        if isinstance(d, datetime):
+            d = d.date()
+        on_duty[d] = on_duty.get(d, 0.0) + float(h["on_duty_hrs"])
+
+    for day in days:
+        d = day.date.date() if isinstance(day.date, datetime) else day.date
+        on_duty[d] = on_duty.get(d, 0.0) + day.on_duty_today
+
+    def sum_window(end_date, n_days: int) -> float:
+        start = end_date - timedelta(days=n_days - 1)
+        return sum(
+            on_duty.get(start + timedelta(days=i), 0.0)
+            for i in range(n_days)
+        )
+
+    for day in days:
+        d = day.date.date() if isinstance(day.date, datetime) else day.date
+        f_total = sum_window(d, 8)
+        a_7day = sum_window(d, 7)
+        c_5day = sum_window(d, 5)
+        day.recap = {
+            "cycle_used_hrs": round(cycle_used_hrs, 2),
+            "on_duty_today": round(day.on_duty_today, 2),
+            "last_8day_total": round(f_total, 2),
+            "last_7day_total": round(a_7day, 2),
+            "tomorrow_70_budget": round(70.0 - a_7day, 2),
+            "last_5day_total": round(c_5day, 2),
+            "last_7day_total_60": round(a_7day, 2),
+            "tomorrow_60_budget": round(60.0 - c_5day, 2),
+            "took_34h_restart": any("34-hr" in ev.remark for ev in day.events),
+            "approximate": False,
         }
 
 
@@ -264,10 +317,12 @@ def take_34hr_restart(events: List[Event], state: State):
     state.on_duty_today = 0.0
 
 
-def drive_leg(events: List[Event], state: State, leg: Leg):
+def drive_leg(events: List[Event], state: State, leg: Leg, leg_kind: str = "loaded"):
     """Drive from leg.start to leg.end, breaking as required.
 
-    Priority when a limit is hit:
+    `leg_kind` tags every DRIVING event emitted by this leg so the day log
+    can split deadhead (empty) miles from loaded miles. Priority order
+    when a limit is hit:
       1. 30-min break (if drive_since_break >= 8)
       2. Fueling stop (if miles_since_fuel >= 1000)
       3. 10-hr reset (if drive_today >= 11 or window >= 14)
@@ -308,7 +363,10 @@ def drive_leg(events: List[Event], state: State, leg: Leg):
         driven_mi = chunk_h * state.avg_speed
         progress = 1.0 - (miles_remaining - driven_mi) / leg.distance_mi
         loc = interpolate(leg.start, leg.end, max(0.0, min(1.0, progress)))
-        events.append(Event(state.now, chunk_h, DRIVING, loc, "Driving", state.total_miles + driven_mi))
+        events.append(Event(
+            state.now, chunk_h, DRIVING, loc, "Driving",
+            state.total_miles + driven_mi, leg_kind=leg_kind,
+        ))
         state.advance(chunk_h)
         state.drive_today += chunk_h
         state.drive_since_break += chunk_h
@@ -330,12 +388,23 @@ def group_by_day(events: List[Event]) -> List[DayLog]:
             days.append(DayLog(date=day_date))
         days[-1].events.append(ev)
     for day in days:
-        if day.events:
-            day.total_miles = sum(
-                ev.duration_h * AVG_SPEED_MPH
-                for ev in day.events
-                if ev.status == DRIVING
-            )
+        if not day.events:
+            continue
+        day.total_miles = 0.0
+        for ev in day.events:
+            if ev.status != DRIVING:
+                continue
+            miles = ev.duration_h * AVG_SPEED_MPH
+            if ev.leg_kind == "deadhead":
+                day.deadhead_mi += miles
+            else:
+                day.loaded_mi += miles
+        day.total_miles = day.deadhead_mi + day.loaded_mi
+        day.on_duty_today = sum(
+            ev.duration_h
+            for ev in day.events
+            if ev.status in (DRIVING, ON_DUTY)
+        )
     return days
 
 
@@ -362,11 +431,11 @@ def generate_trip(trip: TripInput) -> List[DayLog]:
     state.on_duty_today = PRE_TRIP_DURATION
 
     pickup_leg = Leg(start=trip.current, end=trip.pickup, distance_mi=haversine_mi(trip.current, trip.pickup))
-    drive_leg(events, state, pickup_leg)
+    drive_leg(events, state, pickup_leg, leg_kind="deadhead")
     add_on_duty(events, state, PICKUP_DURATION, trip.pickup, "Pickup")
 
     drop_leg = Leg(start=trip.pickup, end=trip.dropoff, distance_mi=haversine_mi(trip.pickup, trip.dropoff))
-    drive_leg(events, state, drop_leg)
+    drive_leg(events, state, drop_leg, leg_kind="loaded")
     add_on_duty(events, state, DROPOFF_DURATION, trip.dropoff, "Dropoff")
 
     add_on_duty(events, state, POST_TRIP_DURATION, trip.dropoff, "Post-trip inspection")

@@ -3,9 +3,10 @@ Unit tests for the HOS engine.
 Run with: python test_hos_engine.py
 """
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from hos_engine import (
     TripInput, Point, generate_trip, haversine_mi, total_distance_mi,
+    compute_recap_with_history,
     OFF_DUTY, SLEEPER, DRIVING, ON_DUTY, MAX_DRIVE_PER_SHIFT,
     MAX_WINDOW_PER_SHIFT, MAX_CYCLE_HOURS, FUEL_INTERVAL_MI,
 )
@@ -327,6 +328,140 @@ class TestHOSEngine(unittest.TestCase):
         for v in b_values:
             self.assertLessEqual(v, 70.0)
             self.assertGreaterEqual(v, 0.0)
+
+
+class TestMileageSplit(unittest.TestCase):
+    def test_legs_are_tagged_deadhead_and_loaded(self):
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        all_driving = [ev for d in days for ev in d.events if ev.status == DRIVING]
+        kinds = {ev.leg_kind for ev in all_driving}
+        self.assertIn("deadhead", kinds)
+        self.assertIn("loaded", kinds)
+
+    def test_short_trip_deadhead_then_loaded(self):
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        driving_events = [ev for ev in days[0].events if ev.status == DRIVING]
+        # First driving events are deadhead (NYC → Philly), then loaded (Philly → Baltimore)
+        kinds_in_order = [ev.leg_kind for ev in driving_events]
+        self.assertEqual(kinds_in_order[0], "deadhead")
+        self.assertIn("loaded", kinds_in_order)
+
+    def test_day_log_mileage_split_sums_to_total(self):
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        for d in days:
+            self.assertAlmostEqual(d.deadhead_mi + d.loaded_mi, d.total_miles, places=3)
+
+    def test_short_trip_deadhead_equals_nyc_to_philly(self):
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        # First day should have ~80 mi deadhead (NYC-Philly) + ~90 mi loaded (Philly-Baltimore)
+        d = days[0]
+        self.assertGreater(d.deadhead_mi, 70.0)
+        self.assertLess(d.deadhead_mi, 95.0)
+        self.assertGreater(d.loaded_mi, 80.0)
+        self.assertLess(d.loaded_mi, 105.0)
+
+    def test_on_duty_today_populated(self):
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        for d in days:
+            self.assertGreater(d.on_duty_today, 0.0)
+
+
+class TestRecapWithHistory(unittest.TestCase):
+    def _history(self, base_date, values_by_offset):
+        """Build a history list with `values_by_offset[days_back] = hours`."""
+        out = []
+        for days_back, hrs in values_by_offset.items():
+            out.append({"date": base_date - timedelta(days=days_back), "on_duty_hrs": hrs})
+        return out
+
+    def test_approximate_flag_is_false(self):
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        history = self._history(days[0].date.date(), {1: 8.0, 2: 8.0, 3: 8.0, 4: 8.0, 5: 8.0, 6: 8.0, 7: 8.0})
+        compute_recap_with_history(days, history)
+        for d in days:
+            self.assertFalse(d.recap["approximate"])
+
+    def test_f_equals_sum_of_history_plus_trip(self):
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        start = days[0].date.date()
+        history = self._history(start, {1: 10.0, 2: 10.0, 3: 10.0, 4: 10.0, 5: 10.0, 6: 10.0, 7: 10.0})
+        compute_recap_with_history(days, history)
+        # 7 prior days × 10 hr = 70 hr history. Day 1 of trip has some on-duty.
+        # F = 70 + day[0].on_duty_today
+        expected_f = 70.0 + days[0].on_duty_today
+        self.assertAlmostEqual(days[0].recap["last_8day_total"], expected_f, places=2)
+
+    def test_window_rolls_forward_on_multi_day_trip(self):
+        # Cross-country-ish: high cycle that forces a restart
+        trip = TripInput(
+            current=Point(40.7128, -74.0060, "New York, NY"),
+            pickup=Point(39.9526, -75.1652, "Philadelphia, PA"),
+            dropoff=Point(41.8781, -87.6298, "Chicago, IL"),
+            cycle_used_hrs=0.0,
+            avg_speed_mph=55.0,
+            start_time=datetime(2026, 6, 8, 6, 0),
+        )
+        days = generate_trip(trip)
+        if len(days) < 3:
+            self.skipTest("Trip is < 3 days, window-roll test not applicable")
+        start = days[0].date.date()
+        # Heavy prior week: 12 hr/day for the last 7 days
+        history = self._history(start, {i: 12.0 for i in range(1, 8)})
+        compute_recap_with_history(days, history)
+        # Day 1: 7 prior days × 12 = 84 hr (exceeds 70 cap, but recap still computes)
+        # The window for day N is days N-7..N. Day 1 includes 7 history days.
+        # Day 2 includes 6 history days + day 1's on-duty.
+        f1 = days[0].recap["last_8day_total"]
+        f2 = days[1].recap["last_8day_total"]
+        f3 = days[2].recap["last_8day_total"]
+        # Each subsequent day the oldest history day (12 hr) drops out,
+        # but a new trip day is added. Net change = +trip_day - 12 hr.
+        # So f2 ≈ f1 + days[1].on_duty_today - 12.0
+        self.assertAlmostEqual(f2, f1 + days[1].on_duty_today - 12.0, places=2)
+        self.assertAlmostEqual(f3, f2 + days[2].on_duty_today - 12.0, places=2)
+
+    def test_approximation_breaks_under_skewed_history(self):
+        # Approximation: A = F * 7/8. Real: A is sum of last 7 days.
+        # If history is heavily skewed (e.g. all on-duty on the oldest day),
+        # these should differ.
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        start = days[0].date.date()
+        # 56 hr on day-7, 0 on days -6..-1
+        history = self._history(start, {7: 56.0, 6: 0, 5: 0, 4: 0, 3: 0, 2: 0, 1: 0})
+        compute_recap_with_history(days, history)
+        # Real A (7 days incl today) = 0+0+0+0+0+0+day[0].on_duty_today ≈ today's on-duty only.
+        # Approximate A would be F * 7/8 ≈ 56 * 7/8 ≈ 49.
+        # Threshold 10 is safely above today's on-duty and well below 49.
+        self.assertLess(days[0].recap["last_7day_total"], 10.0)
+        # And F (8-day total) is dominated by the 56-hr day-7
+        self.assertGreater(days[0].recap["last_8day_total"], 55.0)
+
+    def test_budget_is_negative_when_caps_exceeded(self):
+        # When the prior 8 days already saturated the 70-hr cap, the
+        # "available tomorrow" budget is negative — a strong signal the
+        # driver must take a 34-hr restart before the next day.
+        trip = make_trip(cycle=0.0)
+        days = generate_trip(trip)
+        start = days[0].date.date()
+        # 16 hr/day for 4 prior days + today's ~5 hr on-duty > 60-hr cap.
+        # The 5-day window includes 4 prior days + today, so 4*16+5 = 69.
+        history = self._history(start, {i: 16.0 for i in range(1, 5)})
+        compute_recap_with_history(days, history)
+        d = days[0]
+        self.assertLess(d.recap["tomorrow_60_budget"], 0.0)
+        # 12 hr/day for 7 prior days → 84 hr in 8-day window, over 70.
+        history7 = self._history(start, {i: 12.0 for i in range(1, 8)})
+        compute_recap_with_history(days, history7)
+        d2 = days[0]
+        self.assertLess(d2.recap["tomorrow_70_budget"], 0.0)
 
 
 if __name__ == "__main__":
