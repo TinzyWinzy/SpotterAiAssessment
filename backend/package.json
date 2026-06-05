@@ -1,0 +1,19 @@
+{
+  "name": "spotter-assessment-backend",
+  "version": "1.0.0",
+  "description": "Spotter AI Coding Assessment — HOS-compliant trip planner backend (Django + DRF).",
+  "main": "manage.py",
+  "scripts": {
+    "dev": "python manage.py runserver",
+    "test": "python test_hos_engine.py"
+  },
+  "author": "Tinotenda Duma",
+  "license": "ISC",
+  "dependencies": {
+    "django": ">=6.0",
+    "djangorestframework": ">=3.17",
+    "django-cors-headers": ">=4.6",
+    "requests": ">=2.32",
+    "gunicorn": ">=23.0"
+  }
+}
