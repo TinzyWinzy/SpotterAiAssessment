@@ -33,6 +33,9 @@ staticfiles/
 *.swp
 *.swo
 
+# Personal — not for recruiters
+docs/video-script.md
+
 # Test artifacts
 spotter-trip-plan-*.pdf
 playwright-report/
