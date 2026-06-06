@@ -1,20 +1,18 @@
 """Self-bootstrapping start script: runs migrations then execs gunicorn.
 
-Works regardless of CWD (Render runs from the repo root by default).
-- Adds `backend/` to sys.path so `spotter_backend.settings` resolves.
-- Runs `manage.py migrate` once before serving.
+Idempotent: safe to run on every cold start.
+- Runs `manage.py migrate` to bring the schema up to date.
+- Runs `seed_demo` so admin/admin + tino/12345 always exist on Render free tier
+  (the SQLite file there is ephemeral across redeploys).
 - Re-execs into gunicorn so the PID is correct for Render's health check.
-
-`migrate` is fast and idempotent — no harm running it on every cold start.
 """
 import os
-import subprocess
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BACKEND_DIR = HERE / "backend"
-sys.path.insert(0, str(BACKEND_DIR))
+os.chdir(HERE)
+sys.path.insert(0, str(HERE))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "spotter_backend.settings")
 
 import django  # noqa: E402
@@ -39,5 +37,4 @@ cmd = [
     "--workers", "2",
     "--timeout", "60",
 ]
-os.chdir(BACKEND_DIR)
 os.execvp(cmd[0], cmd)
