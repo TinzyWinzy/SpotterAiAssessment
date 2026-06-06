@@ -6,6 +6,7 @@ A full-stack trip planner that takes a driver's current location, pickup, dropof
 
 > Live demo: **[frontend-three-sage-11.vercel.app](https://frontend-three-sage-11.vercel.app/)**
 > API: **[spotteraiassessment.onrender.com/api/health/](https://spotteraiassessment.onrender.com/api/health/)**
+> Admin: **[frontend-three-sage-11.vercel.app/#/admin](https://frontend-three-sage-11.vercel.app/#/admin)** — login `admin / admin`
 
 ---
 
@@ -36,13 +37,12 @@ The most distinctive output is the daily log: a 900×940 SVG that matches the ca
 |---|---|
 | Backend | Django 6.0 + Django REST Framework 3.17 + gunicorn |
 | Auth | DRF `TokenAuthentication`, custom `IsAdmin` permission, OneToOne `User ↔ Driver` |
-| HOS engine | Pure Python (no numpy, no external deps) — **30 unit tests** |
+| HOS engine | Pure Python (no numpy, no external deps) |
 | Geocoding | Nominatim (OSM) → Photon (Komoot) fallback, in-memory LRU + circuit breaker |
 | Routing | OSRM public demo server |
 | Frontend | Vite + React 19 + TypeScript + Tailwind 4 |
 | Map | Leaflet 1.9 + OpenStreetMap tiles |
 | PDF | jsPDF (vector) |
-| Tests | `unittest` (engine) + `pytest` (backend) + Playwright (e2e) — **165 total** |
 
 No paid services, no API keys, no secrets. Runs on Render + Vercel free tiers.
 
@@ -50,20 +50,9 @@ No paid services, no API keys, no secrets. Runs on Render + Vercel free tiers.
 
 ## HOS rules implemented (FMCSA-HOS-395, April 2022)
 
-- **11-hour driving limit** per shift
-- **14-hour on-duty window** starting at first on-duty
-- **30-minute break** after 8 cumulative driving hours
-- **10-hour reset** between shifts (off-duty *or* sleeper berth)
-- **70-hour / 8-day rolling** cycle cap
-- **34-hour restart** to reset the 70/8 clock
-- **Fueling stop** every 1,000 mi
-- **1 hr on-duty** for pickup + dropoff
-- **Pre-trip + post-trip inspection** (0.25 hr each)
-- **24-hour invariant** — every daily log sums to exactly 24 hr
-- **Midnight day boundary** — pre-shift off-duty fills the morning of the first day
-- **Per-leg mileage split** — deadhead (current→pickup) vs loaded (pickup→dropoff) tagged on every DRIVING event
+11-hour driving limit, 14-hour on-duty window, 30-minute break after 8 cumulative driving hours, 10-hour reset (off-duty or sleeper berth), 70-hour / 8-day rolling cycle cap, 34-hour restart, fuel stop every 1,000 mi, 1-hr on-duty for pickup + dropoff, 0.25-hr pre- and post-trip inspection, 24-hour invariant (every log sums to exactly 24 hr), midnight day boundary, per-leg mileage split (deadhead vs loaded).
 
-Assumptions per spec: property-carrying CMV, 70hr/8day schedule, no adverse conditions, 55 mph average.
+Assumptions per spec: property-carrying CMV, 70hr/8day schedule, no adverse conditions, 55 mph average. See **[docs/architecture.md](docs/architecture.md)** for the engine design and recap math.
 
 ---
 
@@ -71,13 +60,10 @@ Assumptions per spec: property-carrying CMV, 70hr/8day schedule, no adverse cond
 
 ```
                  ┌─────────────────────┐
-   React form ──▶│  POST /api/trip/   │──▶ OSRM (route) ──▶ geometry
-                 │  (DRF view)         │
-                 │                     │──▶ Nominatim/Photon (3× geocode)
+   React form ──▶│  POST /api/trip/   │──▶ OSRM (route)
+                 │  (DRF view)         │──▶ Nominatim/Photon (3× geocode)
                  │                     │──▶ hos_engine.generate_trip
-                 │                     │     (pure-Python HOS simulator)
-                 │                     │──▶ compute_recap_with_history (real
-                 │                     │     per-day recap when driver_id given)
+                 │                     │──▶ compute_recap_with_history
                  │                     │──▶ persist Trip + DayHistory
                  └──────────┬──────────┘
                            ▼
@@ -85,97 +71,48 @@ Assumptions per spec: property-carrying CMV, 70hr/8day schedule, no adverse cond
                            │
                            ▼
                 ┌─────────────────────┐
-                │  React UI           │
-                │  ├─ TripForm        │  ← /#/  hash route
-                │  ├─ RouteMap        │
-                │  ├─ Stops & Rests   │
-                │  ├─ DailyLog (SVG)  │
-                │  └─ jsPDF export    │
-                │                     │
-                │  /#/admin           │
-                │  ├─ Login (token)   │
-                │  ├─ KPI cards       │
-                │  ├─ 30-day sparkline│
-                │  ├─ Top routes      │
-                │  ├─ Cycle histogram │
-                │  └─ Recent trips    │
+                │  React UI  (/#/)    │  trip planner
+                │  React UI  (/#/admin)│ token auth + dashboard
                 └─────────────────────┘
-
-   Token auth:    POST /api/auth/login/    → { token, user }
-                  GET  /api/auth/me/       (Token: ...)
-                  GET  /api/admin/metrics/ (Token: ..., staff only)
-                  GET  /api/admin/trips/   (Token: ..., staff only)
 ```
 
-The HOS engine is the heart of the system. It's a pure-Python event simulator: given a `TripInput` (three `Point`s, cycle used, speed, start time), it walks the timeline and emits a list of `Event`s with status, duration, location, and remark. Then `group_by_day` partitions them into `DayLog`s, and `compute_recap_with_history` attaches the FMCSA-form recap using real per-day on-duty history when a driver is supplied (or the approximate version otherwise).
-
-See **[docs/architecture.md](docs/architecture.md)** for the full write-up.
+The HOS engine is a pure-Python event simulator. Given a `TripInput` (three `Point`s, cycle used, speed, start time), it walks the timeline and emits a list of `Event`s with status, duration, location, and remark. `group_by_day` partitions them into `DayLog`s, and `compute_recap_with_history` attaches the FMCSA-form recap using real per-day on-duty history when a driver is supplied (or the approximate version otherwise).
 
 ---
 
 ## Project structure
 
 ```
-assessments/spotterAI/
-├── backend/
-│   ├── hos_engine.py            ← pure-Python HOS engine (30 unit tests)
-│   ├── test_hos_engine.py       ← 30 HOS engine unit tests
-│   ├── geocoding.py             ← Nominatim + Photon, LRU cache + circuit breaker
-│   ├── routing.py               ← OSRM client
-│   ├── spotter_backend/         ← Django project (settings, urls, wsgi)
-│   ├── trip/
-│   │   ├── models.py            ← Driver, DayHistory, Trip (+ User OneToOne)
-│   │   ├── views.py             ← trip plan + driver CRUD
-│   │   ├── auth_views.py        ← register, login, logout, me
-│   │   ├── admin_views.py       ← metrics + trips list (staff only)
-│   │   ├── serializers.py
-│   │   ├── permissions.py
-│   │   ├── urls.py
-│   │   ├── admin.py
-│   │   ├── migrations/
-│   │   └── management/commands/seed_demo.py
-│   ├── tests/                   ← 108 pytest tests (mocked + live)
-│   ├── requirements.txt
-│   ├── Procfile
-│   └── pytest.ini
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx              ← hash router (/#/ vs /#/admin)
-│   │   ├── components/
-│   │   │   ├── TripForm.tsx
-│   │   │   ├── RouteMap.tsx
-│   │   │   ├── DailyLog.tsx     ← 900×940 SVG paper-form replica
-│   │   │   └── AdminPage.tsx    ← login + dashboard
-│   │   └── lib/
-│   │       ├── api.ts           ← planTrip + auth + admin helpers
-│   │       ├── types.ts
-│   │       └── pdfExport.ts
-│   ├── tests/e2e/               ← 27 Playwright tests (incl. admin flow)
-│   └── scripts/
-│       └── take-fresh-shots.ts
-├── docs/
-│   ├── architecture.md
-│   ├── video-script.md
-│   ├── references/
-│   ├── screenshots/
-│   └── sample-pdfs/
-├── .github/workflows/ci.yml
-├── run-all-tests.sh
-├── LICENSE                      ← ISC
-└── README.md
+backend/
+├── hos_engine.py            ← pure-Python HOS engine
+├── geocoding.py             ← Nominatim + Photon, LRU + circuit breaker
+├── routing.py               ← OSRM client
+├── spotter_backend/         ← Django project (settings, urls, wsgi)
+├── trip/                    ← views, serializers, models, migrations, seed_demo
+└── tests/                   ← pytest tests (mocked + live)
+
+frontend/
+├── src/components/          ← TripForm, RouteMap, DailyLog, AdminPage
+├── src/lib/                 ← api, types, pdfExport
+└── tests/e2e/               ← Playwright tests
+
+docs/                        ← architecture, video-script, screenshots, sample-pdfs
+.github/workflows/ci.yml     ← CI: pytest + Playwright
+run-all-tests.sh             ← local dual-suite runner
+LICENSE                      ← ISC
 ```
 
 ---
 
 ## Testing
 
-**165 tests** across three suites, all green in CI.
+165 tests across three suites, all green in CI.
 
 | Suite | Runner | Count | What it covers |
 |---|---|---|---|
-| HOS engine | `unittest` | 30 | Pure-Python engine: every FMCSA rule, 24-hr invariant, edge cases, recap math, mileage split, history-aware recap |
-| Backend API | `pytest` | 108 | DRF endpoints: trip planning, driver CRUD, history, auth, admin RBAC, metrics math, trip persistence, mocked + live network |
-| Frontend e2e | Playwright | 27 | Form, presets, full submit flow, multi-day results, rest stops, recap table, PDF download, admin login + dashboard, RBAC enforcement |
+| HOS engine | `unittest` | 30 | Every FMCSA rule, 24-hr invariant, edge cases, recap math, mileage split, history-aware recap |
+| Backend API | `pytest` | 108 | Trip planning, driver CRUD, history, auth, admin RBAC, metrics math, trip persistence, mocked + live network |
+| Frontend e2e | Playwright | 27 | Form, presets, submit flow, multi-day results, rest stops, recap table, PDF download, admin login + dashboard, RBAC enforcement |
 
 ```bash
 cd backend
@@ -193,25 +130,18 @@ CI: GitHub Actions runs both suites on every push — see `.github/workflows/ci.
 
 ## Running locally
 
-### Backend
 ```bash
+# Backend
 cd backend
 python -m pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo
 python manage.py runserver 8001   # http://127.0.0.1:8001
-```
 
-### Frontend
-```bash
+# Frontend (separate terminal)
 cd frontend
 npm install
 npm run dev                       # http://127.0.0.1:5173 (proxies /api to :8001)
-```
-
-### Both at once
-```bash
-./run-all-tests.sh                # boots both, runs both test suites
 ```
 
 ---
@@ -230,44 +160,20 @@ npm run dev                       # http://127.0.0.1:5173 (proxies /api to :8001
 }
 ```
 
-Returns the full plan including the route geometry, the day-by-day log with 96 quarter-hour status buckets per day, the per-leg mileage split, and the recap table for the FMCSA form. With `driver_id`, each trip day's on-duty is appended to the driver's `DayHistory` so subsequent calls produce an exact (non-approximate) recap.
+With `driver_id`, each trip day's on-duty is appended to the driver's `DayHistory` so subsequent calls produce an exact (non-approximate) recap.
 
-### Auth
+### Auth + Admin
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/auth/register/` | POST | — | Create a user + auto-create a driver profile |
-| `/api/auth/login/` | POST | — | Return `{ token, user }` |
-| `/api/auth/logout/` | POST | Token | Delete the caller's token |
-| `/api/auth/me/` | GET | Token | Return the current user |
-
-### Admin (staff only)
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/api/admin/metrics/` | GET | KPIs (trips, miles, on-duty), 30-day sparkline, top routes, cycle-usage histogram, top drivers |
-| `/api/admin/trips/` | GET | Paginated recent trips, `?page=N&page_size=M` |
+| `/api/auth/{register,login,logout,me}/` | POST/GET | varies | User lifecycle + token issuance |
+| `/api/admin/metrics/` | GET | staff | KPIs, 30-day sparkline, top routes, cycle histogram, top drivers |
+| `/api/admin/trips/?page=N&page_size=M` | GET | staff | Paginated recent trips |
 
 ---
 
 ## Deploy
 
-Both free-tier, no secrets.
+- **Backend** → [Render](https://render.com) Web Service
+- **Frontend** → [Vercel](https://vercel.com) static site, env `VITE_API_URL` points at Render
 
-- **Backend** → [Render](https://render.com) Web Service, `gunicorn spotter_backend.wsgi:application`
-- **Frontend** → [Vercel](https://vercel.com) static site, `npm run build`, env `VITE_API_URL` points at Render
-
-Live URLs at the top of this README. Admin demo login: **admin / admin** (Render) or `tino / 12345` (driver account).
-
----
-
-## What I'd add with more time
-
-- **Map clustering for rest stops** — Leaflet supercluster for very long trips with many breaks.
-- **Frontend driver selector** — dropdown of saved drivers in `TripForm`, auto-fills cycle, persists selection.
-- **Per-day mileage display in the log + PDF** — the data is computed; just needs UI surfacing.
-- **Postgres + persistent disk on Render** so driver records survive redeploys.
-- **WebSocket push for live HOS-clock** when the planner is left open.
-- **ELD-format import** for `DayHistory` (`.eld` files) so the recap math is sourced from real records, not manual entry.
-
----
-
-Built for the Spotter AI Full-Stack Developer coding assessment. ~20 hours of work, 4 days.
+Live URLs at the top of this README. Admin demo login: `admin / admin`.
