@@ -34,8 +34,9 @@ export function useTripPositionPolling(
       setError(null);
     }
 
+    const tid = tripId;
     function poll() {
-      fetchTripPositions(tripId).then(handlePositions).catch(e => {
+      fetchTripPositions(tid).then(handlePositions).catch(e => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Polling failed");
       });
     }

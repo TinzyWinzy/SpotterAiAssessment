@@ -172,6 +172,9 @@ export interface Trip {
   notes: string;
   created_at: string;
   updated_at: string;
+  sos_triggered_at: string | null;
+  sos_acknowledged_at: string | null;
+  sos_message: string;
   status_logs?: TripStatusLog[];
 }
 
