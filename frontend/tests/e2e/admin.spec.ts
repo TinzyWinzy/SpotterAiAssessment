@@ -16,7 +16,7 @@ test.describe("Admin page", () => {
     await expect(page.getByLabel(/password/i)).toBeVisible();
   });
 
-  test("admin login with valid credentials shows metrics dashboard", async ({ page, request }) => {
+  test("admin login with valid credentials shows metrics dashboard", async ({ page }) => {
     // Use the API to ensure an admin user exists with known credentials.
     // The dev backend has the admin user from `python manage.py seed_demo`.
     await page.goto("/#/admin");

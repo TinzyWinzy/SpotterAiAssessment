@@ -1,0 +1,48 @@
+appId: com.truckledger.app
+productName: TruckLedger
+copyright: Copyright © 2026 TruckLedger
+
+directories:
+  output: release
+  buildResources: public
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+  - "!node_modules/**/*"
+
+extraResources:
+  - from: ../backend
+    to: backend
+    filter:
+      - "**/*"
+      - "!db.sqlite3"
+      - "!__pycache__/**"
+      - "!*.pyc"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: public/favicon.svg
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  installerIcon: public/favicon.svg
+  uninstallerIcon: public/favicon.svg
+  license: ../LICENSE
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.business
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Office

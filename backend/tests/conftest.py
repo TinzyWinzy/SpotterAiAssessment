@@ -2,9 +2,9 @@
 
 Provides:
   - `api_client`   — DRF APIClient
-  - `mock_geo_router` — patches `geocoding.geocode` + `routing.route` to return synthetic data
-  - `freezer`      — pins datetime so 14h-window tests are deterministic
-  - `live_network` — fixture that requires a real backend to be running (used by test_live_*.py)
+  - `mock_geo_router` — patches `geocoding.geocode` + `routing.route` with synthetic data
+  - `freezer`      — pins datetime so tests are deterministic
+  - `live_network` — fixture requiring a live backend
 """
 from __future__ import annotations
 
@@ -16,50 +16,34 @@ from unittest.mock import patch
 
 import pytest
 
-# Make the backend root importable so `import views, geocoding, routing, hos_engine` works.
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Configure Django before any app imports.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "spotter_backend.settings")
 
 import django  # noqa: E402
-
 django.setup()
 
 from rest_framework.test import APIClient  # noqa: E402
 
-
-# ---------- city coords used by mocked geocoder (miles apart, see test_hos_engine.py) ----------
 CITY_COORDS = {
-    "New York, NY":         (40.7128, -74.0060),
-    "Philadelphia, PA":     (39.9526, -75.1652),
-    "Baltimore, MD":        (39.2904, -76.6122),
-    "Washington, D.C.":     (38.9072, -77.0369),
-    "Indianapolis, IN":     (39.7684, -86.1581),
-    "Columbus, OH":         (39.9612, -82.9988),
-    "Chicago, IL":          (41.8781, -87.6298),
-    "Los Angeles, CA":      (34.0522, -118.2437),
-    "Albuquerque, NM":      (35.0844, -106.6504),
-    "Miami, FL":            (25.7617, -80.1918),
-    "Atlanta, GA":          (33.7490, -84.3880),
-    "Charlotte, NC":        (35.2271, -80.8431),
-    "Tampa, FL":            (27.9506, -82.4572),
-    "Unknown City, ZZ":     (None, None),
+    "Harare, Zimbabwe":         (-17.8292, 31.0522),
+    "Beitbridge, Zimbabwe":     (-22.0000, 29.9833),
+    "Johannesburg, South Africa": (-26.2041, 28.0473),
+    "Mutare, Zimbabwe":         (-18.9667, 32.6667),
+    "Bulawayo, Zimbabwe":       (-20.1500, 28.5833),
+    "Lusaka, Zambia":           (-15.3875, 28.3228),
+    "Unknown City, ZZ":         (None, None),
 }
 
 
 def _synthetic_route(coords):
-    """Mimics OSRM: a straight-line geometry between waypoints.
-
-    Distance/duration computed in `routing.py` style, so tests can compare
-    against the same haversine math.
-    """
+    """Mimics OSRM: a straight-line geometry between waypoints."""
     import math
 
     R_MI = 3958.8
-    total = 0.0
+    total_mi = 0.0
     for i in range(1, len(coords)):
         lat1, lon1 = coords[i - 1]
         lat2, lon2 = coords[i]
@@ -68,10 +52,10 @@ def _synthetic_route(coords):
         dl = math.radians(lon2 - lon1)
         a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-        total += R_MI * c
+        total_mi += R_MI * c
     return {
-        "distance_mi": total,
-        "duration_seconds": total / 55.0 * 3600,  # 55 mph
+        "distance_mi": total_mi,
+        "duration_seconds": total_mi / 55.0 * 3600,
         "geometry": {
             "type": "LineString",
             "coordinates": [[lon, lat] for (lat, lon) in coords],
@@ -86,11 +70,7 @@ def api_client():
 
 @pytest.fixture
 def mock_geo_router():
-    """Patch geocoding.geocode + routing.route with deterministic synthetic data.
-
-    The patched geocoder looks up coords from CITY_COORDS, returns None for unknowns.
-    The patched router returns a straight-line geometry between the geocoded coords.
-    """
+    """Patch geocoding.geocode + routing.route with deterministic synthetic data."""
     def fake_geocode(query):
         if query in CITY_COORDS:
             lat, lon = CITY_COORDS[query]
@@ -100,7 +80,6 @@ def mock_geo_router():
         return None
 
     def fake_route(lonlat_pairs):
-        # lonlat_pairs is a list of (lon, lat) — convert to (lat, lon) for our helper.
         coords_latlon = [(lat, lon) for (lon, lat) in lonlat_pairs]
         return _synthetic_route(coords_latlon)
 
@@ -114,7 +93,7 @@ def mock_geo_router():
 
 @pytest.fixture
 def frozen_time():
-    """Pin datetime.utcnow() to a known moment so trips start deterministically."""
+    """Pin datetime.utcnow() to a known moment."""
     fixed = datetime(2026, 6, 5, 6, 0, 0)
     with patch("trip.views.datetime") as dt_patch:
         dt_patch.utcnow.return_value = fixed

@@ -3,3 +3,4 @@ djangorestframework>=3.17,<4.0
 django-cors-headers>=4.6,<5.0
 requests>=2.32,<3.0
 gunicorn>=23.0,<24.0
+twilio>=9.10,<10.0

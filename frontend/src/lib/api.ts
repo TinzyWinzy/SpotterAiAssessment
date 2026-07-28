@@ -1,10 +1,13 @@
-import type { TripRequest, TripResponse } from "./types";
+import type {
+  TripRequest, TripResponse, TripEstimateRequest, TripEstimateResponse,
+  Trip, Vehicle, Driver, FuelRecord, Commodity, CommodityCategory,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 function authHeaders(): Record<string, string> {
-  const t = localStorage.getItem("spotter_token");
-  return t ? { Authorization: `Token ${t}` } : {};
+  const t = localStorage.getItem("truckledger_token");
+  return t ? { Authorization: `Token ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 
 async function jsonOrError<T>(resp: Response): Promise<T> {
@@ -16,6 +19,8 @@ async function jsonOrError<T>(resp: Response): Promise<T> {
   return body as T;
 }
 
+// --- Trip Planning ---
+
 export async function planTrip(req: TripRequest): Promise<TripResponse> {
   const resp = await fetch(`${API_BASE}/api/trip/`, {
     method: "POST",
@@ -25,103 +30,155 @@ export async function planTrip(req: TripRequest): Promise<TripResponse> {
   return jsonOrError<TripResponse>(resp);
 }
 
-// --- Auth ---
-
-export interface User {
-  id: number;
-  username: string;
-  is_admin: boolean;
-  driver_id: number | null;
-}
-
-export interface AuthResult {
-  ok: boolean;
-  token: string;
-  user: User;
-}
-
-export async function login(username: string, password: string): Promise<AuthResult> {
-  const resp = await fetch(`${API_BASE}/api/auth/login/`, {
+export async function estimateTrip(req: TripEstimateRequest): Promise<TripEstimateResponse> {
+  const resp = await fetch(`${API_BASE}/api/trip/estimate/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify(req),
   });
-  return jsonOrError<AuthResult>(resp);
+  return jsonOrError<TripEstimateResponse>(resp);
 }
 
-export async function logout(): Promise<void> {
-  await fetch(`${API_BASE}/api/auth/logout/`, {
+// --- Trips ---
+
+export async function fetchTrips(params?: { status?: string; from_date?: string; to_date?: string; page?: number; page_size?: number }): Promise<{ ok: true; trips: Trip[]; total: number; page: number; page_size: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.from_date) qs.set("from_date", params.from_date);
+  if (params?.to_date) qs.set("to_date", params.to_date);
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.page_size) qs.set("page_size", String(params.page_size));
+  const resp = await fetch(`${API_BASE}/api/trips/?${qs}`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+export async function fetchTrip(id: number): Promise<{ ok: true; trip: Trip }> {
+  const resp = await fetch(`${API_BASE}/api/trips/${id}/`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+export async function updateTrip(id: number, data: Partial<Trip>): Promise<{ ok: true; trip: Trip }> {
+  const resp = await fetch(`${API_BASE}/api/trips/${id}/`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
+}
+
+export async function updateTripStatus(id: number, status: string, location_text?: string, notes?: string): Promise<{ ok: true; trip: Trip }> {
+  const resp = await fetch(`${API_BASE}/api/trips/${id}/status/`, {
     method: "POST",
     headers: authHeaders(),
+    body: JSON.stringify({ status, location_text, notes }),
   });
+  return jsonOrError(resp);
 }
 
-export async function fetchMe(): Promise<User | null> {
-  const resp = await fetch(`${API_BASE}/api/auth/me/`, { headers: authHeaders() });
-  if (resp.status === 401 || resp.status === 403) return null;
-  const body = await jsonOrError<{ ok: true; user: User }>(resp);
-  return body.user;
+// --- Vehicles ---
+
+export async function fetchVehicles(): Promise<{ ok: true; vehicles: Vehicle[] }> {
+  const resp = await fetch(`${API_BASE}/api/vehicles/`, { headers: authHeaders() });
+  return jsonOrError(resp);
 }
 
-// --- Admin ---
-
-export interface AdminMetrics {
-  ok: true;
-  generated_at: string;
-  totals: {
-    trips: number;
-    drivers: number;
-    drivers_with_trips: number;
-    drivers_with_history: number;
-    miles: number;
-    driving_hrs: number;
-    on_duty_hrs: number;
-    avg_miles_per_trip: number;
-  };
-  window: {
-    trips_7d: number;
-    trips_30d: number;
-    sparkline_30d: { date: string; count: number }[];
-  };
-  top_routes: {
-    origin: string;
-    pickup: string;
-    destination: string;
-    count: number;
-    miles: number;
-  }[];
-  cycle_histogram: { label: string; count: number }[];
-  top_drivers: { id: number; name: string; trips: number; miles: number }[];
+export async function createVehicle(data: Partial<Vehicle>): Promise<{ ok: true; vehicle: Vehicle }> {
+  const resp = await fetch(`${API_BASE}/api/vehicles/`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
 }
 
-export interface AdminTripRow {
-  id: number;
-  driver: number | null;
-  driver_name: string | null;
-  current_location: string;
-  pickup_location: string;
-  dropoff_location: string;
-  total_miles: number;
-  total_days: number;
-  total_driving_hrs: number;
-  total_on_duty_hrs: number;
-  final_cycle_used: number;
-  recap_approximate: boolean;
-  created_at: string;
+export async function updateVehicle(id: number, data: Partial<Vehicle>): Promise<{ ok: true; vehicle: Vehicle }> {
+  const resp = await fetch(`${API_BASE}/api/vehicles/${id}/`, {
+    method: "PATCH", headers: authHeaders(), body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
 }
 
-export async function fetchMetrics(): Promise<AdminMetrics> {
-  const resp = await fetch(`${API_BASE}/api/admin/metrics/`, { headers: authHeaders() });
-  return jsonOrError<AdminMetrics>(resp);
+// --- Drivers ---
+
+export async function fetchDrivers(): Promise<{ ok: true; drivers: Driver[] }> {
+  const resp = await fetch(`${API_BASE}/api/drivers/`, { headers: authHeaders() });
+  return jsonOrError(resp);
 }
 
-export async function fetchAdminTrips(
-  page = 1,
-  pageSize = 20,
-): Promise<{ ok: true; page: number; page_size: number; total: number; trips: AdminTripRow[] }> {
-  const resp = await fetch(
-    `${API_BASE}/api/admin/trips/?page=${page}&page_size=${pageSize}`,
-    { headers: authHeaders() },
-  );
+export async function createDriver(data: Partial<Driver>): Promise<{ ok: true; driver: Driver }> {
+  const resp = await fetch(`${API_BASE}/api/drivers/`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
+}
+
+export async function updateDriver(id: number, data: Partial<Driver>): Promise<{ ok: true; driver: Driver }> {
+  const resp = await fetch(`${API_BASE}/api/drivers/${id}/`, {
+    method: "PATCH", headers: authHeaders(), body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
+}
+
+// --- Fuel ---
+
+export async function createFuelRecord(data: { trip: number; vehicle: number; litres: number; price_per_litre_usd: number; total_cost_usd: number; location_text?: string }): Promise<{ ok: true; fuel_record: FuelRecord }> {
+  const resp = await fetch(`${API_BASE}/api/fuel/`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
+}
+
+// --- Commodities ---
+
+export async function fetchCommodities(): Promise<{ ok: true; commodities: Commodity[] }> {
+  const resp = await fetch(`${API_BASE}/api/commodities/`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+export async function fetchCommodityCategories(): Promise<{ ok: true; categories: CommodityCategory[] }> {
+  const resp = await fetch(`${API_BASE}/api/commodity-categories/`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+// --- Auth ---
+
+// --- Position tracking ---
+
+export async function fetchTripPositions(tripId: number): Promise<{ ok: true; positions: import("./types").TripPosition[] }> {
+  const resp = await fetch(`${API_BASE}/api/trips/${tripId}/positions/`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+export async function reportTripPosition(
+  tripId: number,
+  data: { lat: number; lon: number; accuracy?: number; source?: string; remark?: string },
+): Promise<{ ok: true; position: import("./types").TripPosition }> {
+  const resp = await fetch(`${API_BASE}/api/trips/${tripId}/positions/`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
+}
+
+// --- Admin / Live Map ---
+
+export async function fetchActiveTrips(): Promise<{ ok: true; active_trips: (import("./types").Trip & { last_position: import("./types").TripPosition | null })[]; count: number }> {
+  const resp = await fetch(`${API_BASE}/api/admin/active-trips/`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+// --- SOS ---
+
+export async function triggerSos(
+  tripId: number,
+  data?: { message?: string; lat?: number; lon?: number },
+): Promise<{ ok: true }> {
+  const resp = await fetch(`${API_BASE}/api/trips/${tripId}/sos/`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(data || {}),
+  });
+  return jsonOrError(resp);
+}
+
+export async function acknowledgeSos(tripId: number): Promise<{ ok: true }> {
+  const resp = await fetch(`${API_BASE}/api/trips/${tripId}/sos/acknowledge/`, {
+    method: "POST", headers: authHeaders(),
+  });
   return jsonOrError(resp);
 }
