@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'TruckLedger — African Fleet Management',
-        short_name: 'TruckLedger',
-        description: 'Real-time fleet tracking and trip management for African logistics',
+        name: 'Trucki — Fleet Management on WhatsApp',
+        short_name: 'Trucki',
+        description: 'Fleet management on WhatsApp — Track trucks, manage trips, handle emergencies. Built for African logistics.',
         theme_color: '#0e7c86',
         background_color: '#f0fdfa',
         display: 'standalone',

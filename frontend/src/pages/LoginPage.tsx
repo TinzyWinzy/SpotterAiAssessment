@@ -37,7 +37,7 @@ export function LoginPage({ onLogin }: Props) {
             <Truck className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-spotter-800">TruckLedger</h1>
+            <h1 className="text-lg font-bold text-spotter-800">Trucki</h1>
             <p className="text-xs text-gray-500">Sign in to your fleet</p>
           </div>
         </div>
