@@ -112,6 +112,9 @@ REST_FRAMEWORK = {
         'public_booking': '20/hour',
     },
     'NUM_PROXIES': None,
+    # Serialize DecimalField as JSON numbers, not strings.
+    # Without this, JavaScript's .toFixed() throws "not a function".
+    'COERCE_DECIMAL_TO_STRING': False,
 }
 
 ROOT_URLCONF = 'spotter_backend.urls'

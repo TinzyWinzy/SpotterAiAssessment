@@ -13,6 +13,14 @@ function authHeaders(): Record<string, string> {
 }
 
 async function jsonOrError<T>(resp: Response): Promise<T> {
+  if (resp.status === 401) {
+    // Token expired or missing — clear stale credentials and force re-login
+    localStorage.removeItem("truckledger_token");
+    if (!window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/book") && !window.location.pathname.startsWith("/track")) {
+      window.location.href = "/login";
+    }
+    throw new Error("Session expired. Please log in again.");
+  }
   const body = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     const detail = body.error || body.detail || JSON.stringify(body);

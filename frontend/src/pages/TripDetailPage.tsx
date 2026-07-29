@@ -129,7 +129,7 @@ export function TripDetailPage() {
   if (error) return <div className="p-4 bg-red-50 rounded-md text-red-800 text-sm">{error}</div>;
   if (!trip) return <div className="text-gray-500 text-sm">Trip not found</div>;
 
-  const profit = (trip.revenue_usd ?? 0) - (trip.actual_total_cost_usd ?? trip.estimated_total_cost_usd);
+  const profit = parseFloat(String(trip.revenue_usd ?? 0)) - parseFloat(String(trip.actual_total_cost_usd ?? trip.estimated_total_cost_usd));
 
   return (
     <div className="space-y-5">
@@ -180,19 +180,19 @@ export function TripDetailPage() {
           <div className="bg-white rounded-xl shadow-md p-5">
             <h3 className="text-sm font-semibold text-spotter-800 mb-3">Cost & Revenue</h3>
             <div className="space-y-2 text-sm">
-              <CostRow label="Est. Fuel" value={`$${trip.estimated_fuel_cost_usd.toFixed(2)}`} icon={Fuel} />
-              <CostRow label="Est. Driver Pay" value={`$${trip.estimated_driver_pay_usd.toFixed(2)}`} icon={User} />
-              {trip.estimated_border_fees_usd > 0 && <CostRow label="Est. Border Fees" value={`$${trip.estimated_border_fees_usd.toFixed(2)}`} />}
-              <CostRow label="Est. Total Cost" value={`$${trip.estimated_total_cost_usd.toFixed(2)}`} bold />
+              <CostRow label="Est. Fuel" value={`$${parseFloat(String(trip.estimated_fuel_cost_usd)).toFixed(2)}`} icon={Fuel} />
+              <CostRow label="Est. Driver Pay" value={`$${parseFloat(String(trip.estimated_driver_pay_usd)).toFixed(2)}`} icon={User} />
+              {parseFloat(String(trip.estimated_border_fees_usd)) > 0 && <CostRow label="Est. Border Fees" value={`$${parseFloat(String(trip.estimated_border_fees_usd)).toFixed(2)}`} />}
+              <CostRow label="Est. Total Cost" value={`$${parseFloat(String(trip.estimated_total_cost_usd)).toFixed(2)}`} bold />
               {trip.actual_total_cost_usd != null && (
-                <CostRow label="Actual Cost" value={`$${trip.actual_total_cost_usd.toFixed(2)}`} bold />
+                <CostRow label="Actual Cost" value={`$${parseFloat(String(trip.actual_total_cost_usd)).toFixed(2)}`} bold />
               )}
               {trip.estimated_revenue != null && (
-                <CostRow label="Est. Revenue" value={`$${trip.estimated_revenue.toFixed(2)}`} icon={DollarSign} positive />
+                <CostRow label="Est. Revenue" value={`$${parseFloat(String(trip.estimated_revenue)).toFixed(2)}`} icon={DollarSign} positive />
               )}
               {trip.revenue_usd != null && (
                 <>
-                  <CostRow label="Revenue" value={`$${trip.revenue_usd.toFixed(2)}`} icon={DollarSign} positive />
+                  <CostRow label="Revenue" value={`$${parseFloat(String(trip.revenue_usd)).toFixed(2)}`} icon={DollarSign} positive />
                   <CostRow label={profit >= 0 ? "Profit" : "Loss"} value={`$${Math.abs(profit).toFixed(2)}`} bold positive={profit >= 0} />
                 </>
               )}

@@ -32,12 +32,8 @@ export function TripsPage() {
   }
 
   useEffect(() => {
-    fetchTrips({ page_size: 20 }).then(result => {
-      setTrips(result.trips);
-      setTotal(result.total);
-    }).catch(e => {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    }).finally(() => setLoading(false));
+    load(1, "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -110,7 +106,7 @@ export function TripsPage() {
                     <StatusBadge status={t.status} />
                   </td>
                   <td className="py-2 px-4 text-right text-gray-700">
-                    {t.revenue_usd != null ? `$${t.revenue_usd.toFixed(0)}` : "-"}
+                    {t.revenue_usd != null ? `$${parseFloat(String(t.revenue_usd)).toFixed(0)}` : "-"}
                   </td>
                 </tr>
               ))}
