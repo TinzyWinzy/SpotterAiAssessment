@@ -1,10 +1,14 @@
 """Serializers for all models."""
+import uuid
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from .models import (
     Organisation, Vehicle, Driver, Trip, FuelRecord, TripStatusLog, TripPosition,
-    CommodityCategory, Commodity, UserProfile, estimate_revenue,
+    CommodityCategory, Commodity, UserProfile, TripImage, CustomerProfile,
+    estimate_revenue,
 )
 
 User = get_user_model()
@@ -201,7 +205,13 @@ class TripSerializer(serializers.ModelSerializer):
         fields = [
             "id", "organisation", "vehicle", "vehicle_plate",
             "driver", "driver_name",
+            "service_type", "booking_reference",
+            "customer_name", "customer_phone", "customer_email",
+            "customer_token", "booking_time_preference",
+            "cargo_items", "truck_recommendation",
             "origin", "destination", "waypoints", "distance_km",
+            "origin_address", "destination_address",
+            "pickup_notes", "delivery_notes",
             "scheduled_start", "actual_start", "actual_end",
             "estimated_fuel_cost_usd", "estimated_driver_pay_usd",
             "estimated_border_fees_usd", "estimated_tolls_usd",
@@ -233,6 +243,92 @@ class TripUpdateSerializer(serializers.ModelSerializer):
             "load_type", "load_weight_tonnes", "commodity",
             "sos_message", "cycle_used_hrs",
         ]
+
+
+# --- Public booking serializers ---
+
+
+class CargoItemSerializer(serializers.Serializer):
+    description = serializers.CharField(max_length=255)
+    quantity = serializers.IntegerField(default=1)
+    estimated_weight_kg = serializers.FloatField(default=0.0)
+    dimensions = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    is_fragile = serializers.BooleanField(default=False)
+    needs_packing = serializers.BooleanField(default=False)
+    needs_lifting = serializers.BooleanField(default=False)
+
+
+class BookingTimePreferenceSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    time_slot = serializers.ChoiceField(
+        choices=["morning", "afternoon", "evening"],
+        required=False,
+    )
+
+
+class PublicQuoteSerializer(serializers.Serializer):
+    """Anonymous quote request — no auth required."""
+    service_type = serializers.ChoiceField(choices=[
+        "household", "grocery", "construction", "furniture",
+        "office", "long_distance", "custom",
+    ])
+    origin = serializers.CharField(max_length=200)
+    destination = serializers.CharField(max_length=200)
+    waypoints = serializers.ListField(
+        child=serializers.CharField(max_length=200),
+        required=False, default=list,
+    )
+    cargo_items = CargoItemSerializer(many=True, required=False)
+    has_fragile = serializers.BooleanField(default=False)
+    needs_packing = serializers.BooleanField(default=False)
+    needs_labour = serializers.BooleanField(default=False)
+    floor_count = serializers.IntegerField(default=0)
+
+
+class PublicBookingSerializer(serializers.Serializer):
+    """Anonymous booking request — creates a Trip in 'inquiry' status."""
+    service_type = serializers.ChoiceField(choices=[
+        "household", "grocery", "construction", "furniture",
+        "office", "long_distance", "custom",
+    ])
+    origin = serializers.CharField(max_length=200)
+    destination = serializers.CharField(max_length=200)
+    waypoints = serializers.ListField(
+        child=serializers.CharField(max_length=200),
+        required=False, default=list,
+    )
+    cargo_items = serializers.JSONField(required=False, default=list)
+    booking_time_preference = serializers.JSONField(required=False)
+    has_fragile = serializers.BooleanField(default=False)
+    needs_packing = serializers.BooleanField(default=False)
+    needs_labour = serializers.BooleanField(default=False)
+    floor_count = serializers.IntegerField(default=0)
+    customer_name = serializers.CharField(max_length=200, required=False, default="")
+    customer_phone = serializers.CharField(max_length=30, required=False, default="")
+    customer_email = serializers.EmailField(required=False, allow_blank=True, default="")
+    pickup_notes = serializers.CharField(required=False, allow_blank=True, default="")
+    delivery_notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class BookingAssignSerializer(serializers.Serializer):
+    """Admin assigns driver + vehicle to a confirmed booking."""
+    driver_id = serializers.IntegerField()
+    vehicle_id = serializers.IntegerField()
+
+
+class TripImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TripImage
+        fields = ["id", "trip", "image", "caption", "uploaded_at", "uploaded_by"]
+        read_only_fields = ["id", "uploaded_at", "uploaded_by"]
+
+
+class ServiceTypeSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    icon = serializers.CharField()
+    default_truck_sizes = serializers.ListField(child=serializers.CharField())
 
 
 class FuelRecordSerializer(serializers.ModelSerializer):

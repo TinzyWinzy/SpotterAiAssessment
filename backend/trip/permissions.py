@@ -40,9 +40,13 @@ def belongs_to_organisation(obj, user):
 
 
 VALID_STATUS_TRANSITIONS = {
-    "dispatched": ["at_border"],
-    "at_border": ["in_transit"],
-    "in_transit": ["delivered"],
+    "inquiry": ["quoted", "cancelled"],
+    "quoted": ["confirmed", "cancelled"],
+    "confirmed": ["assigned", "cancelled"],
+    "assigned": ["dispatched", "cancelled"],
+    "dispatched": ["at_border", "cancelled"],
+    "at_border": ["in_transit", "cancelled"],
+    "in_transit": ["delivered", "cancelled"],
     "delivered": ["paid"],
     "paid": [],
     "cancelled": [],

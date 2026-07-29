@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { fetchTrip, updateTripStatus, fetchTripPositions, reportTripPosition } from "../lib/api";
+import { fetchTrip, updateTripStatus, fetchTripPositions, reportTripPosition, fetchBookingImages } from "../lib/api";
 import { useTripPositionPolling } from "../lib/useTripPositionPolling";
-import type { Trip, TripPosition } from "../lib/types";
+import type { Trip, TripPosition, TripImage } from "../lib/types";
 import { RouteMap } from "../components/RouteMap";
-import { ArrowLeft, DollarSign, Fuel, User, MapPin, Loader2, Download, Navigation, Crosshair } from "lucide-react";
+import { ArrowLeft, DollarSign, Fuel, User, MapPin, Loader2, Download, Navigation, Crosshair, Package, Phone, Mail, Camera } from "lucide-react";
 import { exportTripSheet } from "../lib/pdfExport";
 import { StatusTimeline } from "../components/StatusTimeline";
 
@@ -21,6 +21,7 @@ export function TripDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [positions, setPositions] = useState<TripPosition[]>([]);
+  const [images, setImages] = useState<TripImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -34,9 +35,11 @@ export function TripDetailPage() {
     Promise.all([
       fetchTrip(Number(id)),
       fetchTripPositions(Number(id)).catch(() => ({ ok: true, positions: [] })),
-    ]).then(([tripRes, posRes]) => {
+      fetchBookingImages(Number(id)).catch(() => ({ ok: true, images: [] })),
+    ]).then(([tripRes, posRes, imgRes]) => {
       setTrip(tripRes.trip);
       setPositions(posRes.positions);
+      setImages(imgRes.images);
     }).catch(e => {
       setError(e instanceof Error ? e.message : "Failed to load");
     }).finally(() => setLoading(false));
@@ -267,6 +270,56 @@ export function TripDetailPage() {
         </div>
 
         <div className="space-y-5">
+          {trip.customer_name && (
+            <div className="bg-white rounded-xl shadow-md p-5">
+              <h3 className="text-sm font-semibold text-spotter-800 mb-3 flex items-center gap-2"><User className="w-4 h-4" /> Customer</h3>
+              <div className="space-y-2 text-xs">
+                <p className="font-medium text-gray-900">{trip.customer_name}</p>
+                {trip.customer_phone && <p className="text-gray-600 flex items-center gap-1"><Phone className="w-3 h-3" /> {trip.customer_phone}</p>}
+                {trip.customer_email && <p className="text-gray-600 flex items-center gap-1"><Mail className="w-3 h-3" /> {trip.customer_email}</p>}
+                {trip.booking_reference && <p className="text-gray-500 text-[10px]">Ref: {trip.booking_reference}</p>}
+              </div>
+            </div>
+          )}
+
+          {trip.cargo_items && trip.cargo_items.length > 0 && (
+            <div className="bg-white rounded-xl shadow-md p-5">
+              <h3 className="text-sm font-semibold text-spotter-800 mb-3 flex items-center gap-2"><Package className="w-4 h-4" /> Cargo ({trip.cargo_items.length} items)</h3>
+              <div className="space-y-2">
+                {trip.cargo_items.map((item, i) => (
+                  <div key={i} className="text-xs bg-spotter-50 rounded p-2">
+                    <div className="font-medium text-gray-900">{item.description || "Item"}</div>
+                    <div className="text-gray-500 mt-0.5 flex flex-wrap gap-2">
+                      <span>Qty: {item.quantity}</span>
+                      <span>Weight: {item.estimated_weight_kg}kg</span>
+                      {item.dimensions && <span>Dim: {item.dimensions}</span>}
+                    </div>
+                    {(item.is_fragile || item.needs_packing) && (
+                      <div className="flex gap-1 mt-1">
+                        {item.is_fragile && <span className="px-1 py-0.5 bg-red-100 text-red-700 rounded text-[10px]">Fragile</span>}
+                        {item.needs_packing && <span className="px-1 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">Needs Packing</span>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {images.length > 0 && (
+            <div className="bg-white rounded-xl shadow-md p-5">
+              <h3 className="text-sm font-semibold text-spotter-800 mb-3 flex items-center gap-2"><Camera className="w-4 h-4" /> Images ({images.length})</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {images.map(img => (
+                  <a key={img.id} href={img.image} target="_blank" rel="noreferrer" className="block">
+                    <img src={img.image} alt={img.caption || "Trip image"} className="w-full h-20 object-cover rounded-md border" />
+                    {img.caption && <p className="text-[10px] text-gray-500 mt-0.5 truncate">{img.caption}</p>}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-xl shadow-md p-5">
             <h3 className="text-sm font-semibold text-spotter-800 mb-3">Update Status</h3>
             <div className="space-y-1.5">

@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchTrips } from "../lib/api";
 import type { Trip } from "../lib/types";
-import { FileText, Loader2, Filter } from "lucide-react";
+import { FileText, Loader2, Filter, User } from "lucide-react";
 
-const STATUS_OPTIONS = ["", "dispatched", "at_border", "in_transit", "delivered", "paid", "cancelled"];
+const STATUS_OPTIONS = ["", "inquiry", "quoted", "confirmed", "assigned", "dispatched", "at_border", "in_transit", "delivered", "paid", "cancelled"];
 
 export function TripsPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -75,8 +75,9 @@ export function TripsPage() {
             <thead className="text-xs text-gray-500 uppercase border-b bg-spotter-50/50">
               <tr>
                 <th className="text-left py-2 px-4">Route</th>
+                <th className="text-left py-2 px-4">Customer</th>
                 <th className="text-left py-2 px-4">Driver</th>
-                <th className="text-left py-2 px-4">Vehicle</th>
+                <th className="text-left py-2 px-4">Service</th>
                 <th className="text-right py-2 px-4">Km</th>
                 <th className="text-right py-2 px-4">Status</th>
                 <th className="text-right py-2 px-4">Revenue</th>
@@ -92,8 +93,18 @@ export function TripsPage() {
                     </Link>
                     <div className="text-[10px] text-gray-400">{new Date(t.created_at).toLocaleDateString()}</div>
                   </td>
+                  <td className="py-2 px-4">
+                    {t.customer_name ? (
+                      <div>
+                        <span className="text-gray-700 text-xs font-medium flex items-center gap-1"><User className="w-3 h-3" /> {t.customer_name}</span>
+                        {t.customer_phone && <div className="text-[10px] text-gray-400">{t.customer_phone}</div>}
+                      </div>
+                    ) : <span className="text-gray-400">-</span>}
+                  </td>
                   <td className="py-2 px-4 text-gray-700">{t.driver_name || "-"}</td>
-                  <td className="py-2 px-4 text-gray-500">{t.vehicle_plate || "-"}</td>
+                  <td className="py-2 px-4">
+                    {t.service_type ? <ServiceBadge type={t.service_type} /> : <span className="text-gray-400">-</span>}
+                  </td>
                   <td className="py-2 px-4 text-right text-gray-700">{t.distance_km}</td>
                   <td className="py-2 px-4 text-right">
                     <StatusBadge status={t.status} />
@@ -119,9 +130,30 @@ export function TripsPage() {
   );
 }
 
+function ServiceBadge({ type }: { type: string }) {
+  const colors: Record<string, string> = {
+    household: "bg-orange-100 text-orange-800",
+    grocery: "bg-green-100 text-green-800",
+    construction: "bg-yellow-100 text-yellow-800",
+    furniture: "bg-purple-100 text-purple-800",
+    office: "bg-blue-100 text-blue-800",
+    long_distance: "bg-indigo-100 text-indigo-800",
+    custom: "bg-gray-100 text-gray-800",
+  };
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${colors[type] || "bg-gray-100 text-gray-800"}`}>
+      {type.replace(/_/g, " ")}
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    dispatched: "bg-blue-100 text-blue-800",
+    inquiry: "bg-yellow-100 text-yellow-800",
+    quoted: "bg-blue-100 text-blue-800",
+    confirmed: "bg-green-100 text-green-800",
+    assigned: "bg-purple-100 text-purple-800",
+    dispatched: "bg-indigo-100 text-indigo-800",
     at_border: "bg-amber-100 text-amber-800",
     in_transit: "bg-purple-100 text-purple-800",
     delivered: "bg-green-100 text-green-800",

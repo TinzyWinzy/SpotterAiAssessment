@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.conf import settings
@@ -219,7 +220,16 @@ class Driver(models.Model):
 
 
 class Trip(models.Model):
-    """A planned trip with cost and revenue tracking."""
+    """A planned trip with cost and revenue tracking.
+
+    Booking statuses:
+      inquiry    – customer submitted a booking request
+      quoted     – admin sent a quote
+      confirmed  – customer accepted the quote / booking confirmed
+      assigned   – admin assigned driver + vehicle
+      dispatched – driver en route to pickup
+      ...
+    """
     organisation = models.ForeignKey(
         Organisation, on_delete=models.CASCADE, related_name="trips",
         null=True, blank=True,
@@ -241,6 +251,11 @@ class Trip(models.Model):
     actual_start = models.DateTimeField(null=True, blank=True)
     actual_end = models.DateTimeField(null=True, blank=True)
 
+    origin_address = models.CharField(max_length=500, blank=True, default="")
+    destination_address = models.CharField(max_length=500, blank=True, default="")
+    pickup_notes = models.TextField(blank=True, default="")
+    delivery_notes = models.TextField(blank=True, default="")
+
     estimated_fuel_cost_usd = models.FloatField(default=0.0)
     estimated_driver_pay_usd = models.FloatField(default=0.0)
     estimated_border_fees_usd = models.FloatField(default=0.0)
@@ -252,9 +267,37 @@ class Trip(models.Model):
     actual_total_cost_usd = models.FloatField(null=True, blank=True)
     revenue_usd = models.FloatField(null=True, blank=True)
 
+    service_type = models.CharField(
+        max_length=30,
+        blank=True, default="",
+        choices=[
+            ("household", "Household Removal"),
+            ("grocery", "Grocery Delivery"),
+            ("construction", "Construction Materials"),
+            ("furniture", "Furniture Delivery"),
+            ("office", "Office Relocation"),
+            ("long_distance", "Long Distance"),
+            ("custom", "Custom Transport"),
+        ],
+    )
+    booking_reference = models.CharField(
+        max_length=20, unique=True, null=True, blank=True,
+    )
+    customer_name = models.CharField(max_length=200, blank=True, default="")
+    customer_phone = models.CharField(max_length=30, blank=True, default="")
+    customer_email = models.EmailField(blank=True, default="")
+    customer_token = models.UUIDField(default=uuid.uuid4, null=True, blank=True)
+    booking_time_preference = models.JSONField(null=True, blank=True)
+    cargo_items = models.JSONField(null=True, blank=True)
+    truck_recommendation = models.JSONField(null=True, blank=True)
+
     status = models.CharField(
         max_length=20,
         choices=[
+            ("inquiry", "Inquiry"),
+            ("quoted", "Quoted"),
+            ("confirmed", "Confirmed"),
+            ("assigned", "Assigned"),
             ("dispatched", "Dispatched"),
             ("at_border", "At Border"),
             ("in_transit", "In Transit"),
@@ -262,7 +305,7 @@ class Trip(models.Model):
             ("paid", "Paid"),
             ("cancelled", "Cancelled"),
         ],
-        default="dispatched",
+        default="inquiry",
     )
     priority = models.CharField(
         max_length=20,
@@ -397,3 +440,43 @@ class TripPosition(models.Model):
 
     def __str__(self):
         return f"Trip {self.trip_id} @ {self.lat:.4f},{self.lon:.4f} ({self.source})"
+
+
+class TripImage(models.Model):
+    """An image attached to a trip/booking."""
+    trip = models.ForeignKey(
+        Trip, on_delete=models.CASCADE, related_name="images",
+    )
+    image = models.ImageField(upload_to="uploads/bookings/%Y/%m/%d/")
+    caption = models.CharField(max_length=255, blank=True, default="")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="uploaded_trip_images",
+    )
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return f"Image for Trip {self.trip_id}: {self.caption or '(no caption)'}"
+
+
+class CustomerProfile(models.Model):
+    """Optional customer account linked to bookings via phone number."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE, null=True, blank=True,
+        related_name="customer_profile",
+    )
+    phone = models.CharField(max_length=30, unique=True)
+    name = models.CharField(max_length=200, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name or self.phone}"

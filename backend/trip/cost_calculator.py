@@ -2,9 +2,10 @@
 Trip cost calculator — pure functions for estimating trip profitability.
 
 All calculations in USD. No external dependencies beyond math.
+Supports service-aware pricing for customer-facing quotes.
 """
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -42,6 +43,21 @@ class CostBreakdown:
     break_even_revenue_usd: float
     recommended_revenue_usd: float
     profit_margin_pct: float
+
+
+@dataclass
+class BookingCostBreakdown:
+    """Customer-facing quote breakdown with service-specific line items."""
+    route_distance_km: float
+    base_fee_usd: float
+    distance_fee_usd: float
+    loading_fee_usd: float
+    packing_fee_usd: float
+    fragile_surcharge_usd: float
+    floor_fee_usd: float
+    fuel_surcharge_usd: float
+    total_estimated_usd: float
+    truck_recommendation: Optional[str] = None
 
 
 def estimate_days(
@@ -141,4 +157,44 @@ def estimate_trip_cost(
         break_even_revenue_usd=total_cost,
         recommended_revenue_usd=recommended,
         profit_margin_pct=profit_margin * 100,
+    )
+
+
+def calculate_booking_estimate(
+    distance_km: float,
+    service_type: str = "custom",
+    cargo_items: Optional[list[dict]] = None,
+    has_fragile: bool = False,
+    needs_packing: bool = False,
+    needs_labour: bool = False,
+    floor_count: int = 0,
+) -> BookingCostBreakdown:
+    """Calculate a customer-facing booking estimate with service-specific pricing."""
+    from .services import get_service
+    svc = get_service(service_type)
+
+    base_fee = svc.base_fee_usd if svc else 30.0
+    distance_rate = svc.distance_rate_per_km_usd if svc else 1.40
+    fragile_pct = svc.fragile_surcharge_pct if svc else 5.0
+    floor_fee = svc.floor_fee_usd if svc else 5
+
+    distance_fee = round(distance_km * distance_rate, 2)
+    loading_fee = 20.0 if needs_labour else 0.0
+    packing_fee = 25.0 if needs_packing else 0.0
+    fragile_surcharge = round((base_fee + distance_fee) * fragile_pct / 100.0, 2) if has_fragile else 0.0
+    floor_charges = round(floor_count * floor_fee, 2)
+    fuel_surcharge = round(distance_fee * 0.15, 2)
+
+    total = round(base_fee + distance_fee + loading_fee + packing_fee + fragile_surcharge + floor_charges + fuel_surcharge, 2)
+
+    return BookingCostBreakdown(
+        route_distance_km=distance_km,
+        base_fee_usd=base_fee,
+        distance_fee_usd=distance_fee,
+        loading_fee_usd=loading_fee,
+        packing_fee_usd=packing_fee,
+        fragile_surcharge_usd=fragile_surcharge,
+        floor_fee_usd=floor_charges,
+        fuel_surcharge_usd=fuel_surcharge,
+        total_estimated_usd=total,
     )

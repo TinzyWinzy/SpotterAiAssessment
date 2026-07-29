@@ -11,6 +11,10 @@ import { VehiclesPage } from "./pages/VehiclesPage";
 import { DriversPage } from "./pages/DriversPage";
 import { DriverView } from "./pages/DriverView";
 import { LiveMapPage } from "./pages/LiveMapPage";
+import { BookingPage } from "./pages/BookingPage";
+import { BookingWizard } from "./pages/BookingWizard";
+import { TrackingPage } from "./pages/TrackingPage";
+import { DispatchPage } from "./pages/DispatchPage";
 import { fetchMe, logout } from "./lib/auth";
 import type { User } from "./lib/types";
 import { LogOut } from "lucide-react";
@@ -55,6 +59,9 @@ function App() {
         <Route path="/login" element={
           !user ? <LoginPage onLogin={handleLogin} /> : <Navigate to={user.is_admin ? "/app" : "/driver"} />
         } />
+        <Route path="/book" element={<BookingPage />} />
+        <Route path="/book/:service" element={<BookingWizard />} />
+        <Route path="/track/:ref" element={<TrackingPage />} />
         <Route path="/driver" element={
           user?.driver_id ? <DriverView user={user} onLogout={handleLogout} /> : <Navigate to="/login" />
         } />
@@ -107,6 +114,7 @@ function AdminRoutes() {
           <Route path="/vehicles" element={<VehiclesPage />} />
           <Route path="/drivers" element={<DriversPage />} />
           <Route path="/live-map" element={<LiveMapPage />} />
+          <Route path="/dispatch" element={<DispatchPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

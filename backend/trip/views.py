@@ -1,4 +1,5 @@
-"""API views — trip planning, vehicles, drivers, fuel, status tracking."""
+"""API views — trip planning, vehicles, drivers, fuel, status tracking, booking."""
+import uuid
 from datetime import datetime
 
 from django.utils import timezone
@@ -16,25 +17,33 @@ from .serializers import (
     FuelRecordSerializer, FuelRecordCreateSerializer,
     TripStatusLogSerializer, TripPositionSerializer, TripPositionCreateSerializer,
     CommoditySerializer, CommodityCategorySerializer,
+    PublicQuoteSerializer, PublicBookingSerializer, BookingAssignSerializer,
+    TripImageSerializer, ServiceTypeSerializer,
 )
 from .models import (
     Organisation, Vehicle, Driver, Trip, FuelRecord,
     TripStatusLog, TripPosition, Commodity, CommodityCategory,
+    TripImage, CustomerProfile,
 )
 from .cost_calculator import (
-    estimate_trip_cost, CostBreakdown, VehicleSpec, DriverSpec,
+    estimate_trip_cost, calculate_booking_estimate, CostBreakdown, VehicleSpec, DriverSpec,
     DEFAULT_FUEL_PRICE_USD_PER_L, DEFAULT_BORDER_FEE_USD,
 )
-from .notifications import send_trip_status_sms
+from .notifications import send_trip_status_sms, send_booking_whatsapp
 from .permissions import (
     get_user_organisation, scope_organisation, belongs_to_organisation,
     validate_status_transition, IsAdmin,
 )
+from .services import list_services, get_service
+from .recommendation_engine import recommend_truck
 import geocoding
 import routing
 from hos_engine import TripInput, Point as HOSPoint, generate_trip as hos_generate_trip
 from trip_engine import Point, compute_stops
 
+
+import secrets
+import string
 
 BURST_RATE = 20
 SUSTAINED_RATE = 60
@@ -46,6 +55,23 @@ class TripAnonThrottle(AnonRateThrottle):
 
 class TripUserThrottle(UserRateThrottle):
     scope = "trip"
+
+
+class PublicAnonThrottle(AnonRateThrottle):
+    scope = "public_booking"
+
+
+def _generate_booking_reference():
+    """Generate a unique booking reference like TRK-00001."""
+    last = Trip.objects.filter(booking_reference__startswith="TRK-").order_by("-id").first()
+    if last and last.booking_reference:
+        try:
+            num = int(last.booking_reference.split("-")[1]) + 1
+        except (IndexError, ValueError):
+            num = 1
+    else:
+        num = 1
+    return f"TRK-{num:05d}"
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +377,7 @@ def trip_plan(request):
         vehicle=vehicle,
         driver=driver,
         commodity=commodity,
+        status="dispatched",  # Admin-created trips skip booking flow
         origin=origin["label"],
         destination=destination["label"],
         waypoints=data.get("waypoints", []),
@@ -755,3 +782,379 @@ def commodity_categories(request):
         "ok": True,
         "categories": CommodityCategorySerializer(qs, many=True).data,
     })
+
+
+# ---------------------------------------------------------------------------
+# Public booking endpoints (no auth required)
+# ---------------------------------------------------------------------------
+
+@api_view(["POST"])
+@throttle_classes([PublicAnonThrottle])
+def public_quote(request):
+    """Anonymous quote — returns cost breakdown + truck recommendation."""
+    s = PublicQuoteSerializer(data=request.data)
+    if not s.is_valid():
+        return Response({"ok": False, "errors": s.errors}, status=status.HTTP_400_BAD_REQUEST)
+    data = s.validated_data
+
+    origin = geocoding.geocode(data["origin"])
+    destination = geocoding.geocode(data["destination"])
+    if not (origin and destination):
+        return Response({"ok": False, "error": "Geocoding failed"}, status=status.HTTP_400_BAD_REQUEST)
+
+    route_result = routing.route([(origin["lon"], origin["lat"]), (destination["lon"], destination["lat"])])
+    if not route_result:
+        return Response({"ok": False, "error": "Routing failed"}, status=status.HTTP_502_BAD_GATEWAY)
+
+    distance_km = round(route_result["distance_mi"] * 1.60934, 1)
+
+    truck_rec = recommend_truck(
+        service_type=data["service_type"],
+        cargo_items=data.get("cargo_items"),
+    )
+
+    cost_estimate = calculate_booking_estimate(
+        distance_km=distance_km,
+        service_type=data["service_type"],
+        cargo_items=data.get("cargo_items"),
+        has_fragile=data.get("has_fragile", False),
+        needs_packing=data.get("needs_packing", False),
+        needs_labour=data.get("needs_labour", False),
+        floor_count=data.get("floor_count", 0),
+    )
+
+    return Response({
+        "ok": True,
+        "route": {
+            "distance_km": distance_km,
+            "duration_h": round(route_result["duration_seconds"] / 3600, 2),
+            "geometry": route_result["geometry"],
+        },
+        "truck_recommendation": {
+            "recommended_size": truck_rec.recommended_size,
+            "capacity_tonnes": truck_rec.capacity_tonnes,
+            "explanation": truck_rec.explanation,
+            "alternatives": truck_rec.alternatives,
+        },
+        "cost_estimate": {
+            "route_distance_km": cost_estimate.route_distance_km,
+            "base_fee_usd": cost_estimate.base_fee_usd,
+            "distance_fee_usd": cost_estimate.distance_fee_usd,
+            "loading_fee_usd": cost_estimate.loading_fee_usd,
+            "packing_fee_usd": cost_estimate.packing_fee_usd,
+            "fragile_surcharge_usd": cost_estimate.fragile_surcharge_usd,
+            "floor_fee_usd": cost_estimate.floor_fee_usd,
+            "fuel_surcharge_usd": cost_estimate.fuel_surcharge_usd,
+            "total_estimated_usd": cost_estimate.total_estimated_usd,
+        },
+    })
+
+
+@api_view(["POST"])
+@throttle_classes([PublicAnonThrottle])
+def public_book(request):
+    """Anonymous booking — creates a Trip in 'inquiry' status."""
+    s = PublicBookingSerializer(data=request.data)
+    if not s.is_valid():
+        return Response({"ok": False, "errors": s.errors}, status=status.HTTP_400_BAD_REQUEST)
+    data = s.validated_data
+
+    origin = geocoding.geocode(data["origin"])
+    destination = geocoding.geocode(data["destination"])
+    if not (origin and destination):
+        return Response({"ok": False, "error": "Geocoding failed"}, status=status.HTTP_400_BAD_REQUEST)
+
+    route_result = routing.route([(origin["lon"], origin["lat"]), (destination["lon"], destination["lat"])])
+    if not route_result:
+        return Response({"ok": False, "error": "Routing failed"}, status=status.HTTP_502_BAD_GATEWAY)
+
+    distance_km = round(route_result["distance_mi"] * 1.60934, 1)
+
+    truck_rec = recommend_truck(
+        service_type=data["service_type"],
+        cargo_items=data.get("cargo_items"),
+    )
+
+    cost_estimate = calculate_booking_estimate(
+        distance_km=distance_km,
+        service_type=data["service_type"],
+        cargo_items=data.get("cargo_items"),
+        has_fragile=data.get("has_fragile", False),
+        needs_packing=data.get("needs_packing", False),
+        needs_labour=data.get("needs_labour", False),
+        floor_count=data.get("floor_count", 0),
+    )
+
+    org = Organisation.objects.filter(is_deleted=False).first()
+
+    booking_ref = _generate_booking_reference()
+    token = uuid.uuid4()
+
+    trip = Trip.objects.create(
+        organisation=org,
+        service_type=data["service_type"],
+        booking_reference=booking_ref,
+        customer_token=token,
+        customer_name=data.get("customer_name", ""),
+        customer_phone=data.get("customer_phone", ""),
+        customer_email=data.get("customer_email", ""),
+        booking_time_preference=data.get("booking_time_preference"),
+        cargo_items=data.get("cargo_items"),
+        truck_recommendation={
+            "recommended_size": truck_rec.recommended_size,
+            "capacity_tonnes": truck_rec.capacity_tonnes,
+            "explanation": truck_rec.explanation,
+            "alternatives": truck_rec.alternatives,
+        },
+        origin=origin["label"],
+        destination=destination["label"],
+        origin_address=data["origin"],
+        destination_address=data["destination"],
+        distance_km=distance_km,
+        route_geometry=route_result.get("geometry"),
+        pickup_notes=data.get("pickup_notes", ""),
+        delivery_notes=data.get("delivery_notes", ""),
+        status="inquiry",
+        estimated_total_cost_usd=cost_estimate.total_estimated_usd,
+        estimated_revenue=cost_estimate.total_estimated_usd,
+    )
+
+    tracking_url = f"{request.build_absolute_uri('/track/')}{booking_ref}?token={token}"
+
+    if data.get("customer_phone"):
+        send_booking_whatsapp(
+            customer_phone=data["customer_phone"],
+            booking_ref=booking_ref,
+            status="inquiry",
+            tracking_url=tracking_url,
+            customer_name=data.get("customer_name", ""),
+        )
+
+    return Response({
+        "ok": True,
+        "booking_reference": booking_ref,
+        "customer_token": str(token),
+        "tracking_url": tracking_url,
+        "trip_id": trip.id,
+        "truck_recommendation": {
+            "recommended_size": truck_rec.recommended_size,
+            "capacity_tonnes": truck_rec.capacity_tonnes,
+            "explanation": truck_rec.explanation,
+        },
+        "cost_estimate": {
+            "total_estimated_usd": cost_estimate.total_estimated_usd,
+        },
+    })
+
+
+@api_view(["GET"])
+def public_booking_lookup(request, ref):
+    """Look up a booking by reference + token (query param or header)."""
+    token = request.GET.get("token") or request.headers.get("X-Booking-Token", "")
+    try:
+        trip = Trip.objects.get(booking_reference=ref)
+    except Trip.DoesNotExist:
+        return Response({"ok": False, "error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if str(trip.customer_token) != token:
+        return Response({"ok": False, "error": "Invalid token"}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response({"ok": True, "booking": TripSerializer(trip).data})
+
+
+@api_view(["POST"])
+def public_booking_confirm(request, ref):
+    """Customer confirms a quoted booking."""
+    token = request.GET.get("token") or request.headers.get("X-Booking-Token", "")
+    try:
+        trip = Trip.objects.get(booking_reference=ref)
+    except Trip.DoesNotExist:
+        return Response({"ok": False, "error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if str(trip.customer_token) != token:
+        return Response({"ok": False, "error": "Invalid token"}, status=status.HTTP_403_FORBIDDEN)
+
+    if trip.status != "quoted":
+        return Response({"ok": False, "error": f"Cannot confirm booking in status '{trip.status}'"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    trip.status = "confirmed"
+    trip.save(update_fields=["status", "updated_at"])
+
+    TripStatusLog.objects.create(
+        trip=trip,
+        from_status="quoted",
+        to_status="confirmed",
+        notes="Customer confirmed booking via tracking link",
+    )
+
+    tracking_url = f"{request.build_absolute_uri('/track/')}{ref}?token={token}"
+    if trip.customer_phone:
+        send_booking_whatsapp(
+            customer_phone=trip.customer_phone,
+            booking_ref=ref,
+            status="confirmed",
+            tracking_url=tracking_url,
+            customer_name=trip.customer_name,
+        )
+
+    return Response({"ok": True, "status": "confirmed"})
+
+
+@api_view(["GET"])
+def public_track(request, ref):
+    """Public tracking page data for a booking."""
+    token = request.GET.get("token") or request.headers.get("X-Booking-Token", "")
+    try:
+        trip = Trip.objects.select_related("driver", "vehicle").get(booking_reference=ref)
+    except Trip.DoesNotExist:
+        return Response({"ok": False, "error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if str(trip.customer_token) != token:
+        return Response({"ok": False, "error": "Invalid token"}, status=status.HTTP_403_FORBIDDEN)
+
+    last_position = trip.positions.order_by("-timestamp").first()
+
+    return Response({
+        "ok": True,
+        "booking_reference": trip.booking_reference,
+        "status": trip.status,
+        "service_type": trip.service_type,
+        "origin": trip.origin,
+        "destination": trip.destination,
+        "origin_address": trip.origin_address,
+        "destination_address": trip.destination_address,
+        "distance_km": trip.distance_km,
+        "estimated_total_cost_usd": trip.estimated_total_cost_usd,
+        "driver_name": trip.driver.name if trip.driver else None,
+        "driver_phone": trip.driver.phone_number if trip.driver else None,
+        "vehicle_plate": trip.vehicle.plate if trip.vehicle else None,
+        "truck_recommendation": trip.truck_recommendation,
+        "cargo_items": trip.cargo_items,
+        "pickup_notes": trip.pickup_notes,
+        "delivery_notes": trip.delivery_notes,
+        "status_logs": TripStatusLogSerializer(trip.status_logs.order_by("-timestamp"), many=True).data,
+        "last_position": TripPositionSerializer(last_position).data if last_position else None,
+        "created_at": trip.created_at,
+        "updated_at": trip.updated_at,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Admin booking endpoints (auth required)
+# ---------------------------------------------------------------------------
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def bookings_list(request):
+    """Admin list bookings (trips in inquiry/quoted/confirmed/assigned)."""
+    qs = Trip.objects.select_related("driver", "vehicle").order_by("-created_at")
+    qs = scope_organisation(qs, request.user)
+    booking_statuses = ["inquiry", "quoted", "confirmed", "assigned"]
+    qs = qs.filter(status__in=booking_statuses)
+
+    svc = request.GET.get("service_type")
+    if svc:
+        qs = qs.filter(service_type=svc)
+
+    status_filter = request.GET.get("status")
+    if status_filter and status_filter in booking_statuses:
+        qs = qs.filter(status=status_filter)
+
+    return Response({
+        "ok": True,
+        "bookings": TripSerializer(qs, many=True).data,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def booking_assign(request, pk):
+    """Admin assigns driver + vehicle to a confirmed booking."""
+    try:
+        trip = Trip.objects.get(pk=pk)
+    except Trip.DoesNotExist:
+        return Response({"ok": False, "error": "not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not belongs_to_organisation(trip, request.user) and not request.user.is_staff:
+        return Response({"ok": False, "error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    if trip.status not in ("confirmed", "assigned"):
+        return Response({"ok": False, "error": f"Cannot assign in status '{trip.status}'"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    s = BookingAssignSerializer(data=request.data)
+    if not s.is_valid():
+        return Response({"ok": False, "errors": s.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        vehicle = Vehicle.objects.get(pk=s.validated_data["vehicle_id"])
+        driver = Driver.objects.get(pk=s.validated_data["driver_id"])
+    except (Vehicle.DoesNotExist, Driver.DoesNotExist) as e:
+        return Response({"ok": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not belongs_to_organisation(vehicle, request.user) or not belongs_to_organisation(driver, request.user):
+        return Response({"ok": False, "error": "Driver or vehicle does not belong to your organisation"},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    trip.vehicle = vehicle
+    trip.driver = driver
+    old_status = trip.status
+    trip.status = "assigned"
+    trip.save(update_fields=["vehicle", "driver", "status", "updated_at"])
+
+    TripStatusLog.objects.create(
+        trip=trip,
+        from_status=old_status,
+        to_status="assigned",
+        notes=f"Assigned driver {driver.name}, vehicle {vehicle.plate}",
+        updated_by=request.user if request.user.is_authenticated else None,
+    )
+
+    if trip.customer_phone:
+        tracking_url = f"{request.build_absolute_uri('/track/')}{trip.booking_reference}?token={trip.customer_token}"
+        send_booking_whatsapp(
+            customer_phone=trip.customer_phone,
+            booking_ref=trip.booking_reference,
+            status="assigned",
+            tracking_url=tracking_url,
+            customer_name=trip.customer_name,
+        )
+
+    return Response({"ok": True, "trip": TripSerializer(trip).data})
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def booking_images(request, pk):
+    """Upload or list images for a booking/trip."""
+    try:
+        trip = Trip.objects.get(pk=pk)
+    except Trip.DoesNotExist:
+        return Response({"ok": False, "error": "not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not belongs_to_organisation(trip, request.user) and not request.user.is_staff:
+        return Response({"ok": False, "error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "GET":
+        images = trip.images.all()
+        return Response({"ok": True, "images": TripImageSerializer(images, many=True).data})
+
+    if "image" not in request.FILES:
+        return Response({"ok": False, "error": "No image file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+    img = TripImage.objects.create(
+        trip=trip,
+        image=request.FILES["image"],
+        caption=request.data.get("caption", ""),
+        uploaded_by=request.user if request.user.is_authenticated else None,
+    )
+    return Response({"ok": True, "image": TripImageSerializer(img).data},
+                    status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+def service_types_list(request):
+    """List available service types with metadata."""
+    services = list_services()
+    return Response({"ok": True, "services": services})

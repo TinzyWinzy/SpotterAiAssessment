@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { Truck, BarChart3, MapPin, Users, FileText, Navigation } from "lucide-react";
+import { Truck, BarChart3, MapPin, Users, FileText, Navigation, ClipboardList } from "lucide-react";
 
 const links = [
   { to: "/app", icon: MapPin, label: "Trip Planner" },
   { to: "/app/trips", icon: FileText, label: "Trips" },
   { to: "/app/vehicles", icon: Truck, label: "Vehicles" },
   { to: "/app/drivers", icon: Users, label: "Drivers" },
+  { to: "/app/dispatch", icon: ClipboardList, label: "Dispatch" },
   { to: "/app/live-map", icon: Navigation, label: "Live Map" },
   { to: "/app/dashboard", icon: BarChart3, label: "Dashboard" },
 ];

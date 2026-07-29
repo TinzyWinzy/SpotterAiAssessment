@@ -1,6 +1,8 @@
 import type {
   TripRequest, TripResponse, TripEstimateRequest, TripEstimateResponse,
   Trip, Vehicle, Driver, FuelRecord, Commodity, CommodityCategory,
+  PublicQuoteRequest, PublicQuoteResponse, PublicBookingRequest, PublicBookingResponse,
+  TrackingData, TripImage, ServiceType,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -179,6 +181,84 @@ export async function triggerSos(
 export async function acknowledgeSos(tripId: number): Promise<{ ok: true }> {
   const resp = await fetch(`${API_BASE}/api/trips/${tripId}/sos/acknowledge/`, {
     method: "POST", headers: authHeaders(),
+  });
+  return jsonOrError(resp);
+}
+
+// --- Public Booking ---
+
+export async function getPublicQuote(req: PublicQuoteRequest): Promise<PublicQuoteResponse> {
+  const resp = await fetch(`${API_BASE}/api/public/quote/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  return jsonOrError(resp);
+}
+
+export async function createPublicBooking(req: PublicBookingRequest): Promise<PublicBookingResponse> {
+  const resp = await fetch(`${API_BASE}/api/public/book/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  return jsonOrError(resp);
+}
+
+export async function getPublicBooking(ref: string, token: string): Promise<{ ok: boolean; booking: Trip }> {
+  const resp = await fetch(`${API_BASE}/api/public/book/${ref}/?token=${encodeURIComponent(token)}`);
+  return jsonOrError(resp);
+}
+
+export async function confirmPublicBooking(ref: string, token: string): Promise<{ ok: boolean; status: string }> {
+  const resp = await fetch(`${API_BASE}/api/public/book/${ref}/confirm/?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return jsonOrError(resp);
+}
+
+export async function trackPublicBooking(ref: string, token: string): Promise<TrackingData> {
+  const resp = await fetch(`${API_BASE}/api/public/track/${ref}/?token=${encodeURIComponent(token)}`);
+  return jsonOrError(resp);
+}
+
+export async function fetchServices(): Promise<{ ok: boolean; services: ServiceType[] }> {
+  const resp = await fetch(`${API_BASE}/api/services/`);
+  return jsonOrError(resp);
+}
+
+// --- Admin Booking ---
+
+export async function fetchBookings(params?: { status?: string; service_type?: string }): Promise<{ ok: boolean; bookings: Trip[] }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.service_type) qs.set("service_type", params.service_type);
+  const resp = await fetch(`${API_BASE}/api/bookings/?${qs}`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+export async function assignBooking(id: number, data: { driver_id: number; vehicle_id: number }): Promise<{ ok: boolean; trip: Trip }> {
+  const resp = await fetch(`${API_BASE}/api/bookings/${id}/assign/`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(data),
+  });
+  return jsonOrError(resp);
+}
+
+export async function fetchBookingImages(id: number): Promise<{ ok: boolean; images: TripImage[] }> {
+  const resp = await fetch(`${API_BASE}/api/bookings/${id}/images/`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+export async function uploadBookingImage(id: number, file: File, caption?: string): Promise<{ ok: boolean; image: TripImage }> {
+  const form = new FormData();
+  form.append("image", file);
+  if (caption) form.append("caption", caption);
+  const t = localStorage.getItem("truckledger_token");
+  const headers: Record<string, string> = {};
+  if (t) headers["Authorization"] = `Token ${t}`;
+  const resp = await fetch(`${API_BASE}/api/bookings/${id}/images/`, {
+    method: "POST", headers, body: form,
   });
   return jsonOrError(resp);
 }

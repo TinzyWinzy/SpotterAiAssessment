@@ -106,7 +106,9 @@ REST_FRAMEWORK = {
         'anon': '10/hour',
         'user': '120/hour',
         'trip': '30/hour',
+        'public_booking': '20/hour',
     },
+    'NUM_PROXIES': None,
 }
 
 ROOT_URLCONF = 'spotter_backend.urls'

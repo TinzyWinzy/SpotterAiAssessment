@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { planTrip, estimateTrip, fetchVehicles, fetchDrivers, fetchCommodities, fetchCommodityCategories } from "../lib/api";
+import { planTrip, estimateTrip, fetchVehicles, fetchDrivers, fetchCommodities, fetchCommodityCategories, fetchServices } from "../lib/api";
 import { RouteMap } from "../components/RouteMap";
 import { CommoditySelector } from "../components/CommoditySelector";
-import type { TripResponse, Vehicle, Driver, TripEstimateResponse, Commodity, CommodityCategory } from "../lib/types";
-import { Truck, Loader2, Plus, X, DollarSign, Fuel, User, MapPin, ArrowLeftRight, Copy, Check } from "lucide-react";
+import type { TripResponse, Vehicle, Driver, TripEstimateResponse, Commodity, CommodityCategory, ServiceType, CargoItem } from "../lib/types";
+import { Truck, Loader2, Plus, X, DollarSign, Fuel, User, MapPin, ArrowLeftRight, Copy, Check, Package, Calendar } from "lucide-react";
 
 type Region = "us" | "sadc";
 
@@ -45,11 +45,16 @@ export function TripPlannerPage() {
   const [commodityId, setCommodityId] = useState<number | null>(null);
   const [loadWeight, setLoadWeight] = useState<number | null>(null);
   const [estimatedRevenue, setEstimatedRevenue] = useState<number | null>(null);
+  const [serviceType, setServiceType] = useState("");
+  const [cargoItems, setCargoItems] = useState<CargoItem[]>([]);
+  const [bookingDate, setBookingDate] = useState("");
+  const [bookingTimeSlot, setBookingTimeSlot] = useState("");
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [commodities, setCommodities] = useState<Commodity[]>([]);
   const [commodityCategories, setCommodityCategories] = useState<CommodityCategory[]>([]);
+  const [services, setServices] = useState<ServiceType[]>([]);
   const [trip, setTrip] = useState<TripResponse | null>(null);
   const [estimateResult, setEstimateResult] = useState<TripEstimateResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -62,7 +67,20 @@ export function TripPlannerPage() {
     fetchDrivers().then(r => setDrivers(r.drivers)).catch(() => {});
     fetchCommodities().then(r => setCommodities(r.commodities)).catch(() => {});
     fetchCommodityCategories().then(r => setCommodityCategories(r.categories)).catch(() => {});
+    fetchServices().then(r => setServices(r.services)).catch(() => {});
   }, []);
+
+  function addCargoItem() {
+    setCargoItems([...cargoItems, { description: "", quantity: 1, estimated_weight_kg: 0, is_fragile: false, needs_packing: false, needs_lifting: false }]);
+  }
+
+  function updateCargoItem(i: number, field: keyof CargoItem, value: unknown) {
+    setCargoItems(cargoItems.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
+  }
+
+  function removeCargoItem(i: number) {
+    setCargoItems(cargoItems.filter((_, idx) => idx !== i));
+  }
 
   async function handleEstimate(e: FormEvent) {
     e.preventDefault();
@@ -90,13 +108,21 @@ export function TripPlannerPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await planTrip({
+      const payload: Record<string, unknown> = {
         origin, destination, waypoints,
         vehicle_id: vehicleId, driver_id: driverId,
         commodity_id: commodityId ?? undefined,
         load_weight_tonnes: loadWeight ?? undefined,
         estimated_revenue: estimatedRevenue ?? undefined,
-      });
+      };
+      if (serviceType) payload.service_type = serviceType;
+      if (cargoItems.length > 0) payload.cargo_items = cargoItems;
+      if (bookingDate || bookingTimeSlot) {
+        payload.booking_time_preference = {};
+        if (bookingDate) (payload.booking_time_preference as Record<string, string>).date = bookingDate;
+        if (bookingTimeSlot) (payload.booking_time_preference as Record<string, string>).time_slot = bookingTimeSlot;
+      }
+      const result = await planTrip(payload as unknown as Parameters<typeof planTrip>[0]);
       setTrip(result);
       setEstimateResult(null);
     } catch (err) {
@@ -251,6 +277,64 @@ export function TripPlannerPage() {
                 <span className="font-bold text-green-700 text-sm">${estimatedRevenue.toFixed(2)}</span>
               </div>
             )}
+
+            <hr className="border-spotter-100" />
+            <div>
+              <label className="text-xs font-medium text-gray-600 flex items-center gap-1"><Package className="w-3 h-3" /> Service Type</label>
+              <select value={serviceType} onChange={e => setServiceType(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-spotter-300 outline-none">
+                <option value="">Standard Trip</option>
+                {services.map(s => (
+                  <option key={s.key} value={s.key}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1"><Package className="w-3 h-3" /> Cargo Items ({cargoItems.length})</label>
+                <button type="button" onClick={addCargoItem} className="text-xs text-spotter-600 hover:text-spotter-800">+ Add Item</button>
+              </div>
+              {cargoItems.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {cargoItems.map((item, i) => (
+                    <div key={i} className="flex flex-wrap gap-1.5 p-2 bg-spotter-50 rounded-md">
+                      <input value={item.description} onChange={e => updateCargoItem(i, "description", e.target.value)}
+                        placeholder="Description" className="flex-1 min-w-[120px] px-2 py-1 text-xs border rounded" />
+                      <input type="number" value={item.quantity || ""} onChange={e => updateCargoItem(i, "quantity", parseInt(e.target.value) || 0)}
+                        placeholder="Qty" className="w-14 px-2 py-1 text-xs border rounded" />
+                      <input type="number" value={item.estimated_weight_kg || ""} onChange={e => updateCargoItem(i, "estimated_weight_kg", parseFloat(e.target.value) || 0)}
+                        placeholder="Kg" className="w-16 px-2 py-1 text-xs border rounded" />
+                      <label className="flex items-center gap-1 text-[10px] text-gray-600">
+                        <input type="checkbox" checked={item.is_fragile} onChange={e => updateCargoItem(i, "is_fragile", e.target.checked)} /> Fragile
+                      </label>
+                      <label className="flex items-center gap-1 text-[10px] text-gray-600">
+                        <input type="checkbox" checked={item.needs_packing} onChange={e => updateCargoItem(i, "needs_packing", e.target.checked)} /> Pack
+                      </label>
+                      <button type="button" onClick={() => removeCargoItem(i)} className="text-red-500 hover:text-red-700"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1"><Calendar className="w-3 h-3" /> Scheduled Date</label>
+                <input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-spotter-300 outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Time Slot</label>
+                <select value={bookingTimeSlot} onChange={e => setBookingTimeSlot(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-spotter-300 outline-none">
+                  <option value="">Any</option>
+                  <option value="morning">Morning</option>
+                  <option value="afternoon">Afternoon</option>
+                  <option value="evening">Evening</option>
+                </select>
+              </div>
+            </div>
 
             <div className="flex gap-1.5 mb-2">
               <button type="button" onClick={() => { setRegion("us"); setOrigin(REGION_DEFAULTS.us.origin); setDestination(REGION_DEFAULTS.us.destination); setWaypoints([]); setTrip(null); setEstimateResult(null); }}

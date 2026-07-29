@@ -144,10 +144,23 @@ export interface Trip {
   vehicle_plate: string | null;
   driver: number | null;
   driver_name: string | null;
+  service_type: string;
+  booking_reference: string | null;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string;
+  customer_token: string | null;
+  booking_time_preference: BookingTimePreference | null;
+  cargo_items: CargoItem[];
+  truck_recommendation: TruckRecommendation | null;
   origin: string;
   destination: string;
   waypoints: string[];
   distance_km: number;
+  origin_address: string;
+  destination_address: string;
+  pickup_notes: string;
+  delivery_notes: string;
   scheduled_start: string | null;
   actual_start: string | null;
   actual_end: string | null;
@@ -178,7 +191,133 @@ export interface Trip {
   status_logs?: TripStatusLog[];
 }
 
-export type TripStatus = "dispatched" | "at_border" | "in_transit" | "delivered" | "paid" | "cancelled";
+export interface CargoItem {
+  description: string;
+  quantity: number;
+  estimated_weight_kg: number;
+  dimensions?: string;
+  is_fragile: boolean;
+  needs_packing: boolean;
+  needs_lifting: boolean;
+}
+
+export interface BookingTimePreference {
+  date?: string;
+  time_slot?: "morning" | "afternoon" | "evening";
+}
+
+export interface TruckRecommendation {
+  recommended_size: string;
+  capacity_tonnes: number;
+  explanation: string;
+  alternatives: string[];
+}
+
+export interface ServiceType {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  default_truck_sizes: string[];
+}
+
+export interface PublicQuoteRequest {
+  service_type: string;
+  origin: string;
+  destination: string;
+  waypoints?: string[];
+  cargo_items?: CargoItem[];
+  has_fragile?: boolean;
+  needs_packing?: boolean;
+  needs_labour?: boolean;
+  floor_count?: number;
+}
+
+export interface PublicBookingRequest {
+  service_type: string;
+  origin: string;
+  destination: string;
+  waypoints?: string[];
+  cargo_items?: CargoItem[];
+  booking_time_preference?: BookingTimePreference;
+  has_fragile?: boolean;
+  needs_packing?: boolean;
+  needs_labour?: boolean;
+  floor_count?: number;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  pickup_notes?: string;
+  delivery_notes?: string;
+}
+
+export interface PublicQuoteResponse {
+  ok: boolean;
+  route: RouteInfo;
+  truck_recommendation: TruckRecommendation;
+  cost_estimate: {
+    route_distance_km: number;
+    base_fee_usd: number;
+    distance_fee_usd: number;
+    loading_fee_usd: number;
+    packing_fee_usd: number;
+    fragile_surcharge_usd: number;
+    floor_fee_usd: number;
+    fuel_surcharge_usd: number;
+    total_estimated_usd: number;
+  };
+}
+
+export interface PublicBookingResponse {
+  ok: boolean;
+  booking_reference: string;
+  customer_token: string;
+  tracking_url: string;
+  trip_id: number;
+  truck_recommendation: {
+    recommended_size: string;
+    capacity_tonnes: number;
+    explanation: string;
+  };
+  cost_estimate: {
+    total_estimated_usd: number;
+  };
+}
+
+export interface TrackingData {
+  ok: boolean;
+  booking_reference: string;
+  status: TripStatus;
+  service_type: string;
+  origin: string;
+  destination: string;
+  origin_address: string;
+  destination_address: string;
+  distance_km: number;
+  estimated_total_cost_usd: number;
+  driver_name: string | null;
+  driver_phone: string | null;
+  vehicle_plate: string | null;
+  truck_recommendation: TruckRecommendation | null;
+  cargo_items: CargoItem[];
+  pickup_notes: string;
+  delivery_notes: string;
+  status_logs: TripStatusLog[];
+  last_position: TripPosition | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TripImage {
+  id: number;
+  trip: number;
+  image: string;
+  caption: string;
+  uploaded_at: string;
+  uploaded_by: number | null;
+}
+
+export type TripStatus = "inquiry" | "quoted" | "confirmed" | "assigned" | "dispatched" | "at_border" | "in_transit" | "delivered" | "paid" | "cancelled";
 
 export interface TripStatusLog {
   id: number;

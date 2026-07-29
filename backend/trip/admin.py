@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Organisation, Vehicle, Driver, Trip, FuelRecord,
     TripStatusLog, TripPosition, CommodityCategory, Commodity,
-    UserProfile,
+    UserProfile, TripImage, CustomerProfile,
 )
 
 
@@ -68,6 +68,19 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "organisation", "created_at")
     list_filter = ("organisation",)
     search_fields = ("user__username", "organisation__name")
+
+
+@admin.register(TripImage)
+class TripImageAdmin(admin.ModelAdmin):
+    list_display = ("trip", "caption", "uploaded_at")
+    list_filter = ("uploaded_at",)
+    search_fields = ("trip__booking_reference", "caption")
+
+
+@admin.register(CustomerProfile)
+class CustomerProfileAdmin(admin.ModelAdmin):
+    list_display = ("name", "phone", "email", "created_at")
+    search_fields = ("name", "phone", "email")
 
 
 @admin.register(TripPosition)
