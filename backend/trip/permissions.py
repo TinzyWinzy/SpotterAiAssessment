@@ -13,7 +13,7 @@ def get_user_organisation(user):
         return user.profile.organisation
     if hasattr(user, "driver_profile") and user.driver_profile and user.driver_profile.organisation_id:
         return user.driver_profile.organisation
-    return Organisation.objects.filter(is_deleted=False).first()
+    return None
 
 
 def scope_organisation(qs, user, org_field="organisation"):
@@ -65,12 +65,6 @@ class IsAdmin(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
 
-
-class IsAuthenticated(BasePermission):
-    """Allow any authenticated user."""
-
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated)
 
 
 class IsOwnerOrReadOnly(BasePermission):

@@ -14,6 +14,7 @@ export function DispatchPage() {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [assigning, setAssigning] = useState<number | null>(null);
   const [showAssign, setShowAssign] = useState<number | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -23,6 +24,7 @@ export function DispatchPage() {
 
   async function load() {
     setLoading(true);
+    setError(null);
     try {
       const [b, d, v] = await Promise.all([
         fetchBookings(),
@@ -32,7 +34,9 @@ export function DispatchPage() {
       setBookings(b.bookings);
       setDrivers(d.drivers);
       setVehicles(v.vehicles);
-    } catch (_) {}
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load bookings");
+    }
     setLoading(false);
   }
 
@@ -41,6 +45,7 @@ export function DispatchPage() {
   async function handleAssign(tripId: number) {
     if (!selDriver || !selVehicle) return;
     setAssigning(tripId);
+    setError(null);
     try {
       await assignBooking(tripId, {
         driver_id: parseInt(selDriver),
@@ -50,7 +55,9 @@ export function DispatchPage() {
       setSelDriver("");
       setSelVehicle("");
       load();
-    } catch (_) {}
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign driver");
+    }
     setAssigning(null);
   }
 
@@ -74,6 +81,10 @@ export function DispatchPage() {
         <h1 className="text-xl font-bold text-gray-900">Dispatch Queue</h1>
         <button onClick={load} className="text-sm text-spotter-600 hover:text-spotter-800">Refresh</button>
       </div>
+      
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">{error}</div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {grouped.map(group => (

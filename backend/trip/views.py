@@ -42,11 +42,7 @@ from hos_engine import TripInput, Point as HOSPoint, generate_trip as hos_genera
 from trip_engine import Point, compute_stops
 
 
-import secrets
-import string
 
-BURST_RATE = 20
-SUSTAINED_RATE = 60
 
 
 class TripAnonThrottle(AnonRateThrottle):
@@ -62,16 +58,8 @@ class PublicAnonThrottle(AnonRateThrottle):
 
 
 def _generate_booking_reference():
-    """Generate a unique booking reference like TRK-00001."""
-    last = Trip.objects.filter(booking_reference__startswith="TRK-").order_by("-id").first()
-    if last and last.booking_reference:
-        try:
-            num = int(last.booking_reference.split("-")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"TRK-{num:05d}"
+    """Generate a unique booking reference like TRK-ABC123."""
+    return f"TRK-{uuid.uuid4().hex[:6].upper()}"
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +404,7 @@ def trip_plan(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def trips_list(request):
-    qs = Trip.objects.select_related("driver", "vehicle").order_by("-created_at")
+    qs = Trip.objects.select_related("driver", "vehicle").prefetch_related("status_logs", "commodity__category").order_by("-created_at")
     qs = scope_organisation(qs, request.user)
 
     # Pagination
@@ -462,6 +450,7 @@ def trip_detail(request, pk):
     if not s.is_valid():
         return Response({"ok": False, "errors": s.errors}, status=status.HTTP_400_BAD_REQUEST)
     s.save()
+    trip.refresh_from_db()
     return Response({"ok": True, "trip": TripSerializer(trip).data})
 
 
@@ -1061,9 +1050,24 @@ def bookings_list(request):
     if status_filter and status_filter in booking_statuses:
         qs = qs.filter(status=status_filter)
 
+    try:
+        page = int(request.GET.get("page", "1"))
+        page_size = min(int(request.GET.get("page_size", "20")), 100)
+    except ValueError:
+        page = 1
+        page_size = 20
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = TripSerializer(qs[start:end], many=True).data
+
     return Response({
         "ok": True,
-        "bookings": TripSerializer(qs, many=True).data,
+        "bookings": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
     })
 
 
@@ -1142,6 +1146,13 @@ def booking_images(request, pk):
 
     if "image" not in request.FILES:
         return Response({"ok": False, "error": "No image file provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+    uploaded_file = request.FILES["image"]
+    if uploaded_file.size > 5 * 1024 * 1024:
+        return Response({"ok": False, "error": "File too large (max 5MB)"}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if not uploaded_file.content_type.startswith("image/"):
+        return Response({"ok": False, "error": "Invalid file type"}, status=status.HTTP_400_BAD_REQUEST)
 
     img = TripImage.objects.create(
         trip=trip,

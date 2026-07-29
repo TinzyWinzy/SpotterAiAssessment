@@ -197,7 +197,7 @@ class TripStatusLogSerializer(serializers.ModelSerializer):
 class TripSerializer(serializers.ModelSerializer):
     driver_name = serializers.CharField(source="driver.name", read_only=True, default=None)
     vehicle_plate = serializers.CharField(source="vehicle.plate", read_only=True, default=None)
-    status_logs = TripStatusLogSerializer(many=True, read_only=True, source="tripstatuslog_set")
+    status_logs = TripStatusLogSerializer(many=True, read_only=True)
     commodity_data = CommoditySerializer(source="commodity", read_only=True)
 
     class Meta:
@@ -207,7 +207,7 @@ class TripSerializer(serializers.ModelSerializer):
             "driver", "driver_name",
             "service_type", "booking_reference",
             "customer_name", "customer_phone", "customer_email",
-            "customer_token", "booking_time_preference",
+            "booking_time_preference",
             "cargo_items", "truck_recommendation",
             "origin", "destination", "waypoints", "distance_km",
             "origin_address", "destination_address",

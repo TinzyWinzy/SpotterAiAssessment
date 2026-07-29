@@ -51,21 +51,3 @@ export function getToken(): string | null {
   return localStorage.getItem("truckledger_token");
 }
 
-export async function fetchDashboard(): Promise<import("./types").DashboardMetrics> {
-  const token = localStorage.getItem("truckledger_token");
-  const resp = await fetch(`${API_BASE}/api/admin/metrics/`, {
-    headers: { Authorization: `Token ${token}` },
-  });
-  const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || "Failed to load dashboard");
-  return body;
-}
-
-export async function fetchFleetSummary(): Promise<string> {
-  const token = localStorage.getItem("truckledger_token");
-  const resp = await fetch(`${API_BASE}/api/admin/summary/`, {
-    headers: { Authorization: `Token ${token}` },
-  });
-  const body = await resp.json();
-  return body.text;
-}

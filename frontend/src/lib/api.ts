@@ -270,3 +270,16 @@ export async function uploadBookingImage(id: number, file: File, caption?: strin
   });
   return jsonOrError(resp);
 }
+
+// --- Dashboard ---
+
+export async function fetchDashboard(): Promise<import("./types").DashboardMetrics> {
+  const resp = await fetch(`${API_BASE}/api/admin/metrics/`, { headers: authHeaders() });
+  return jsonOrError(resp);
+}
+
+export async function fetchFleetSummary(): Promise<string> {
+  const resp = await fetch(`${API_BASE}/api/admin/summary/`, { headers: authHeaders() });
+  const body = await jsonOrError<{ text: string }>(resp);
+  return body.text;
+}

@@ -3,7 +3,7 @@ import {
   Truck, MapPin, DollarSign, TrendingUp, Fuel, AlertTriangle,
   RefreshCw,
 } from "lucide-react";
-import { fetchDashboard } from "../lib/auth";
+import { fetchDashboard } from "../lib/api";
 import type { DashboardMetrics } from "../lib/types";
 
 export function DashboardPage() {
@@ -25,7 +25,7 @@ export function DashboardPage() {
   }
 
   useEffect(() => {
-    fetchDashboard().then(m => setMetrics(m)).catch(e => setError(e instanceof Error ? e.message : "Failed to load"));
+    load();
   }, []);
 
   return (
@@ -51,8 +51,8 @@ export function DashboardPage() {
             <Kpi icon={MapPin} label="Total Trips" value={metrics.totals.trips} sub={`${metrics.window.trips_30d} in 30d`} />
             <Kpi icon={Truck} label="Active Vehicles" value={`${metrics.totals.active_vehicles}/${metrics.totals.vehicles}`} sub="fleet size" />
             <Kpi icon={MapPin} label="Total km" value={metrics.totals.km.toLocaleString()} sub={`${metrics.totals.avg_km_per_trip} avg/trip`} />
-            <Kpi icon={DollarSign} label="Revenue" value={`$${metrics.totals.revenue_usd.toLocaleString()}`} />
-            <Kpi icon={TrendingUp} label="Est. Profit" value={`$${metrics.totals.estimated_profit_usd.toLocaleString()}`}
+            <Kpi icon={DollarSign} label="Revenue" value={`$${Number(metrics.totals.revenue_usd || 0).toLocaleString()}`} />
+            <Kpi icon={TrendingUp} label="Est. Profit" value={`$${Number(metrics.totals.estimated_profit_usd || 0).toLocaleString()}`}
               sub={metrics.totals.estimated_profit_usd > 0 ? "positive" : "negative"}
               positive={metrics.totals.estimated_profit_usd > 0} />
             <Kpi icon={Fuel} label="Fuel Efficiency" value={`${metrics.fuel.fleet_efficiency_l_100km} L/100km`}
