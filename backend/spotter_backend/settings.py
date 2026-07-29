@@ -24,10 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    import sys as _sys
-    _is_build = any(cmd in _sys.argv[0] for cmd in ("collectstatic", "build", "start"))
-    if _is_build:
-        SECRET_KEY = "insecure-build-key-not-for-production"
+    if os.environ.get("RENDER"):
+        SECRET_KEY = "render-build-key-not-for-production"
     else:
         raise ValueError(
             "DJANGO_SECRET_KEY must be set. "
