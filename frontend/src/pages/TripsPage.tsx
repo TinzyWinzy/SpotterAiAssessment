@@ -85,9 +85,9 @@ export function TripsPage() {
             <tbody>
               {trips.map(t => (
                 <tr key={t.id} className="border-b last:border-0 hover:bg-spotter-50/30 cursor-pointer"
-                  onClick={() => navigate(`/trips/${t.id}`)}>
+                  onClick={() => navigate(`/app/trips/${t.id}`)}>
                   <td className="py-2 px-4">
-                    <Link to={`/trips/${t.id}`} className="text-spotter-700 hover:underline font-medium">
+                    <Link to={`/app/trips/${t.id}`} className="text-spotter-700 hover:underline font-medium">
                       {t.origin} → {t.destination}
                     </Link>
                     <div className="text-[10px] text-gray-400">{new Date(t.created_at).toLocaleDateString()}</div>

@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Organisation, Vehicle, Driver, Trip, FuelRecord,
     TripStatusLog, TripPosition, CommodityCategory, Commodity,
+    UserProfile,
 )
 
 
@@ -60,6 +61,13 @@ class TripStatusLogAdmin(admin.ModelAdmin):
     list_filter = ("to_status",)
     search_fields = ("trip__origin", "notes")
     readonly_fields = ("timestamp",)
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "organisation", "created_at")
+    list_filter = ("organisation",)
+    search_fields = ("user__username", "organisation__name")
 
 
 @admin.register(TripPosition)

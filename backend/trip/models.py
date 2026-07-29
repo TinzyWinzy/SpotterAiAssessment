@@ -58,24 +58,60 @@ def estimate_revenue(commodity, distance_km, weight_tonnes):
     return round(total, 2) if total else None
 
 
+class OrganisationQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(is_deleted=False)
+
+
 class Organisation(models.Model):
-    """Fleet owner organisation. One per install for single-tenant;
-    supports multi-tenant in the future.
-    """
+    """Fleet owner organisation."""
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=100, unique=True)
     license_key = models.CharField(max_length=100, blank=True, default="")
     licensed_vehicles = models.IntegerField(default=50)
     contact_phone = models.CharField(max_length=30, blank=True, default="")
     contact_email = models.EmailField(blank=True, default="")
+    is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = OrganisationQuerySet.as_manager()
 
     class Meta:
         ordering = ["name"]
 
     def __str__(self):
         return self.name
+
+    def delete(self, using=None, keep_parents=False):
+        self.is_deleted = True
+        self.save(update_fields=["is_deleted"])
+
+
+class UserProfile(models.Model):
+    """Profile linking a User to an Organisation."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="members",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["user__username"]
+
+    def __str__(self):
+        return f"{self.user.username} @ {self.organisation or 'unaffiliated'}"
+
+
+class VehicleQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(is_deleted=False)
 
 
 class Vehicle(models.Model):
@@ -109,15 +145,31 @@ class Vehicle(models.Model):
         ],
         default="active",
     )
+    is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = VehicleQuerySet.as_manager()
 
     class Meta:
         ordering = ["plate"]
         unique_together = [("organisation", "plate")]
+        indexes = [
+            models.Index(fields=["organisation", "status"]),
+            models.Index(fields=["plate"]),
+        ]
 
     def __str__(self):
         return f"{self.plate} ({self.make} {self.model})"
+
+    def delete(self, using=None, keep_parents=False):
+        self.is_deleted = True
+        self.save(update_fields=["is_deleted", "updated_at"])
+
+
+class DriverQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(is_deleted=False)
 
 
 class Driver(models.Model):
@@ -145,14 +197,25 @@ class Driver(models.Model):
         choices=[("active", "Active"), ("inactive", "Inactive")],
         default="active",
     )
+    is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = DriverQuerySet.as_manager()
+
     class Meta:
         ordering = ["name"]
+        indexes = [
+            models.Index(fields=["organisation", "status"]),
+            models.Index(fields=["phone_number"]),
+        ]
 
     def __str__(self):
         return self.name
+
+    def delete(self, using=None, keep_parents=False):
+        self.is_deleted = True
+        self.save(update_fields=["is_deleted", "updated_at"])
 
 
 class Trip(models.Model):
@@ -235,12 +298,20 @@ class Trip(models.Model):
     sos_acknowledged_at = models.DateTimeField(null=True, blank=True)
     sos_message = models.TextField(blank=True, default="")
     notes = models.TextField(blank=True, default="")
+    cycle_used_hrs = models.FloatField(default=0.0)
+    hos_daily_logs = models.JSONField(null=True, blank=True)
+    waypoints_geocoded = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["-created_at"])]
+        indexes = [
+            models.Index(fields=["-created_at"]),
+            models.Index(fields=["organisation", "status"]),
+            models.Index(fields=["driver", "status"]),
+            models.Index(fields=["vehicle", "status"]),
+        ]
 
     def __str__(self):
         who = self.driver.name if self.driver else "anonymous"

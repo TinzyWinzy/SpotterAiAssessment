@@ -313,7 +313,7 @@ export function TripPlannerPage() {
               </div>
               <RouteMap route={route} stops={stops || []} restStops={[]} />
               {trip?.trip_id && (
-                <button onClick={() => navigate(`/trips/${trip.trip_id}`)}
+                <button onClick={() => navigate(`/app/trips/${trip.trip_id}`)}
                   className="mt-3 w-full py-2 bg-spotter-600 text-white text-sm rounded-md hover:bg-spotter-700">
                   View Trip Details
                 </button>

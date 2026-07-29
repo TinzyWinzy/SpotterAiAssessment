@@ -21,7 +21,7 @@ export function LoginPage({ onLogin }: Props) {
     try {
       await login(username, password);
       onLogin();
-      navigate("/dashboard");
+      navigate("/app/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

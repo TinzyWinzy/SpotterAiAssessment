@@ -4,7 +4,7 @@ from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from .models import (
     Organisation, Vehicle, Driver, Trip, FuelRecord, TripStatusLog, TripPosition,
-    CommodityCategory, Commodity, estimate_revenue,
+    CommodityCategory, Commodity, UserProfile, estimate_revenue,
 )
 
 User = get_user_model()
@@ -29,6 +29,7 @@ class RegisterSerializer(serializers.Serializer):
             slug="default",
             defaults={"name": user.username},
         )
+        UserProfile.objects.get_or_create(user=user, defaults={"organisation": org})
         Driver.objects.create(user=user, name=validated["name"], organisation=org)
         token, _ = Token.objects.get_or_create(user=user)
         return {"user": user, "token": token}
@@ -42,16 +43,27 @@ class LoginSerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     is_admin = serializers.BooleanField(source="is_staff", read_only=True)
     driver_id = serializers.SerializerMethodField()
+    organisation_id = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "is_admin", "driver_id", "date_joined"]
+        fields = ["id", "username", "is_admin", "driver_id", "organisation_id", "date_joined"]
 
     def get_driver_id(self, obj):
         try:
             return obj.driver_profile.id
         except Driver.DoesNotExist:
             return None
+
+    def get_organisation_id(self, obj):
+        if hasattr(obj, "profile") and obj.profile.organisation_id:
+            return obj.profile.organisation_id
+        try:
+            if obj.driver_profile and obj.driver_profile.organisation_id:
+                return obj.driver_profile.organisation_id
+        except Driver.DoesNotExist:
+            pass
+        return None
 
 
 class CommodityCategorySerializer(serializers.ModelSerializer):
@@ -145,6 +157,8 @@ class TripRequestSerializer(serializers.Serializer):
     estimated_revenue = serializers.DecimalField(
         max_digits=12, decimal_places=2, required=False, allow_null=True,
     )
+    cycle_used_hrs = serializers.FloatField(required=False, default=0.0)
+    use_sleeper_berth = serializers.BooleanField(required=False, default=True)
 
 
 class TripEstimateSerializer(serializers.Serializer):
@@ -159,6 +173,8 @@ class TripEstimateSerializer(serializers.Serializer):
     fuel_price_per_litre_usd = serializers.FloatField(default=1.60)
     border_crossings = serializers.IntegerField(default=0)
     tolls_usd = serializers.FloatField(default=0.0)
+    cycle_used_hrs = serializers.FloatField(required=False, default=0.0)
+    use_sleeper_berth = serializers.BooleanField(required=False, default=True)
 
 
 class TripStatusLogSerializer(serializers.ModelSerializer):
@@ -197,10 +213,12 @@ class TripSerializer(serializers.ModelSerializer):
             "status", "priority", "load_type", "load_weight_tonnes",
             "commodity", "commodity_data",
             "sos_triggered_at", "sos_acknowledged_at", "sos_message",
-            "notes", "created_at", "updated_at",
+            "notes", "cycle_used_hrs", "hos_daily_logs",
+            "waypoints_geocoded",
+            "created_at", "updated_at",
             "status_logs",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "commodity_data", "sos_triggered_at", "sos_acknowledged_at"]
+        read_only_fields = ["id", "created_at", "updated_at", "commodity_data", "sos_triggered_at", "sos_acknowledged_at", "hos_daily_logs", "waypoints_geocoded"]
 
 
 class TripUpdateSerializer(serializers.ModelSerializer):
@@ -213,7 +231,7 @@ class TripUpdateSerializer(serializers.ModelSerializer):
             "actual_border_fees_usd", "actual_total_cost_usd",
             "revenue_usd", "estimated_revenue",
             "load_type", "load_weight_tonnes", "commodity",
-            "sos_message",
+            "sos_message", "cycle_used_hrs",
         ]
 
 

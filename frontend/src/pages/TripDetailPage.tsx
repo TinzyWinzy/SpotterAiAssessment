@@ -131,7 +131,7 @@ export function TripDetailPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <Link to="/trips" className="text-spotter-600 hover:text-spotter-800"><ArrowLeft className="w-5 h-5" /></Link>
+        <Link to="/app/trips" className="text-spotter-600 hover:text-spotter-800"><ArrowLeft className="w-5 h-5" /></Link>
         <div>
           <h2 className="text-xl font-bold text-spotter-800">{trip.origin} → {trip.destination}</h2>
           <p className="text-sm text-gray-500">

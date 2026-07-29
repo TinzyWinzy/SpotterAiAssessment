@@ -1,10 +1,11 @@
-"""WhatsApp webhook — Twilio inbound message handler."""
+"""WhatsApp webhook — Twilio inbound message handler with signature validation."""
 import logging
 from urllib.parse import parse_qs
 
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from twilio.request_validator import RequestValidator
 from twilio.twiml.messaging_response import MessagingResponse
 
 from .handlers import handle_incoming
@@ -12,11 +13,31 @@ from .handlers import handle_incoming
 logger = logging.getLogger(__name__)
 
 
+def _validate_twilio_request(request):
+    """Validate that the request genuinely came from Twilio."""
+    twilio_signature = request.META.get("HTTP_X_TWILIO_SIGNATURE", "")
+    if not twilio_signature:
+        return False
+
+    validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
+    url = request.build_absolute_uri()
+    post_data = request.POST.dict() if request.POST else parse_qs(request.body.decode("utf-8"))
+    flat_post = {k: v[0] if isinstance(v, list) else v for k, v in post_data.items()}
+
+    return validator.validate(url, flat_post, twilio_signature)
+
+
 @csrf_exempt
 def webhook(request):
     """Twilio WhatsApp webhook: receive messages and reply."""
     if request.method != "POST":
         return HttpResponse(status=405)
+
+    # Validate Twilio signature (skip if Twilio not configured)
+    if settings.TWILIO_AUTH_TOKEN:
+        if not _validate_twilio_request(request):
+            logger.warning("Invalid Twilio signature — rejecting webhook request")
+            return HttpResponse(status=403)
 
     try:
         body_text = request.body.decode("utf-8")

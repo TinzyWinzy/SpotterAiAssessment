@@ -24,7 +24,7 @@ async function jsonOrError<T>(resp: Response): Promise<T> {
 export async function planTrip(req: TripRequest): Promise<TripResponse> {
   const resp = await fetch(`${API_BASE}/api/trip/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(req),
   });
   return jsonOrError<TripResponse>(resp);
@@ -33,7 +33,7 @@ export async function planTrip(req: TripRequest): Promise<TripResponse> {
 export async function estimateTrip(req: TripEstimateRequest): Promise<TripEstimateResponse> {
   const resp = await fetch(`${API_BASE}/api/trip/estimate/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(req),
   });
   return jsonOrError<TripEstimateResponse>(resp);
