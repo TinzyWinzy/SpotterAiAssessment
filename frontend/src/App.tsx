@@ -37,11 +37,10 @@ function App() {
     setUser(null);
   }
 
-  function handleLogin() {
-    (async () => {
-      const me = await fetchMe();
-      setUser(me);
-    })();
+  async function handleLogin(): Promise<User | null> {
+    const me = await fetchMe();
+    setUser(me);
+    return me;
   }
 
   if (loading) {

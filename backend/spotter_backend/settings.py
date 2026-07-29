@@ -80,15 +80,28 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-_cors_all = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "False").lower() in ("1", "true", "yes")
-if _cors_all:
-    CORS_ALLOW_ALL_ORIGINS = True
+_cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+_cors_all_env = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "").strip().lower()
+
+if _cors_origins_env:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    CORS_ALLOW_ALL_ORIGINS = _cors_all_env in ("1", "true", "yes")
 else:
-    CORS_ALLOWED_ORIGINS = [
-        o.strip()
-        for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
-        if o.strip()
-    ]
+    CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-booking-token",
+]
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [

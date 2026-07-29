@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { login } from "../lib/auth";
 import { Truck, LogIn } from "lucide-react";
 
+import type { User } from "../lib/types";
+
 interface Props {
-  onLogin: () => void;
+  onLogin: () => Promise<User | null>;
 }
 
 export function LoginPage({ onLogin }: Props) {
@@ -20,8 +22,14 @@ export function LoginPage({ onLogin }: Props) {
     setBusy(true);
     try {
       await login(username, password);
-      onLogin();
-      navigate("/app/dashboard");
+      const me = await onLogin();
+      if (me?.is_admin) {
+        navigate("/app/dashboard");
+      } else if (me?.driver_id) {
+        navigate("/driver");
+      } else {
+        navigate("/app/dashboard");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
