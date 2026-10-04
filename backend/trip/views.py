@@ -4,7 +4,7 @@ from datetime import datetime
 
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
@@ -745,6 +745,8 @@ def trip_sos_acknowledge(request, pk):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([])
 def health(request):
     return Response({"ok": True, "service": "truckledger"})
 
@@ -1165,6 +1167,7 @@ def booking_images(request, pk):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def service_types_list(request):
     """List available service types with metadata."""
     services = list_services()
